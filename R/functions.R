@@ -250,10 +250,10 @@ make_pcon_ward_map <- function(pcon, zoom) {
 
 make_pcon_ward_map("Edgbaston", 13)
 
-make_locality_pcon_map <- function(locality) {
+make_locality_pcon_map <- function(loc) {
   # wrapped pcon names for district map
   label_pcons24_wrap_locality <- locality_pcons |> 
-    filter(locality_name == locality) |> 
+    filter(locality == loc) |> 
     pull(pcon24nm) |> 
     str_wrap(15)
   label_pcons24_wrap_locality<- gsub("\n", "<br>", label_pcons24_wrap_locality) |> 
@@ -261,9 +261,9 @@ make_locality_pcon_map <- function(locality) {
   
   # labels with % inside locality for locality map
   label_pcons24_locality <- locality_pcons |> 
-    filter(locality_name == locality) |> 
+    filter(locality == loc) |> 
     mutate(label = paste0(pcon24nm, " constituency", "<br>",
-                          round(pct, 0), "% falls within ", locality_name, " locality")) |> 
+                          round(pct, 0), "% falls within ", locality, " locality")) |> 
     pull(label) |> 
     lapply(htmltools::HTML)
   
@@ -278,7 +278,7 @@ make_locality_pcon_map <- function(locality) {
     addMapPane("clustersPane", zIndex = 2000) |>   # GP clusters (top)
     addTiles(options = tileOptions(opacity = 0.5)) |> 
     # display locality of interest only
-    addPolygons(data = bham_locality_boundaries |> filter(locality_name == locality),
+    addPolygons(data = bham_locality_boundaries |> filter(locality == loc),
                 color = border_colour,
                 weight = 4,
                 opacity = 1,
@@ -286,7 +286,7 @@ make_locality_pcon_map <- function(locality) {
                 fillColor = "white",
                 options = pathOptions(pane = "localityPane")) |>
     # display IMD by LSOA for district of interest only
-    addPolygons(data = locality_lsoas |> filter(locality_name == locality),
+    addPolygons(data = locality_lsoas |> filter(locality == loc),
                 fillColor = ~imd25_pal(imd25_decile),
                 fillOpacity = 0.7,
                 color = ~imd25_pal(imd25_decile),
@@ -296,7 +296,7 @@ make_locality_pcon_map <- function(locality) {
                 options = pathOptions(pane = "imdPane"),
                 group = "IMD 2025") |>
     # full pcons text only
-    addPolygons(data = locality_pcons_full |> filter(locality_name == locality),
+    addPolygons(data = locality_pcons_full |> filter(locality == loc),
                 color = border_colour,
                 weight = 0,
                 opacity = 0,
@@ -310,7 +310,7 @@ make_locality_pcon_map <- function(locality) {
                 options = pathOptions(pane = "pconsTextPane"),
                 group = "Full pcons") |>
     # full pcons
-    addPolygons(data = locality_pcons_full |> filter(locality_name == locality),
+    addPolygons(data = locality_pcons_full |> filter(locality == loc),
                 color = border_colour,
                 weight = 1,
                 opacity = 1,
@@ -324,7 +324,7 @@ make_locality_pcon_map <- function(locality) {
                 label = label_pcons24_locality,
                 options = pathOptions(pane = "pconsPane"),
                 group = "Full pcons") |>
-    addMarkers(data = locality_gp_points |> filter(locality_name == locality),
+    addMarkers(data = locality_gp_points |> filter(locality == loc),
                label = ~surgery_name,
                group = "GP Surgeries",
                options = pathOptions(pane = "markersPane"),
@@ -367,10 +367,10 @@ make_locality_pcon_map <- function(locality) {
 }
 make_locality_pcon_map("Central")
 
-make_locality_ward_map <- function(locality) {
+make_locality_ward_map <- function(loc) {
   # wrapped ward names for district map
   label_wards25_wrap_locality <- locality_wards |> 
-    filter(locality_name == locality) |> 
+    filter(locality == loc) |> 
     pull(wd25nm) |> 
     str_wrap(15)
   label_wards25_wrap_locality<- gsub("\n", "<br>", label_wards25_wrap_locality) |> 
@@ -378,9 +378,9 @@ make_locality_ward_map <- function(locality) {
   
   # labels with % inside locality for locality map
   label_wards25_locality <- locality_wards |> 
-    filter(locality_name == locality) |> 
+    filter(locality == loc) |> 
     mutate(label = paste0(wd25nm, "<br>",
-                          round(pct, 0), "% falls within ", locality_name, " locality")) |> 
+                          round(pct, 0), "% falls within ", locality, " locality")) |> 
     pull(label) |> 
     lapply(htmltools::HTML)
   
@@ -395,7 +395,7 @@ make_locality_ward_map <- function(locality) {
     addMapPane("clustersPane", zIndex = 2000) |>   # GP clusters (top)
     addTiles(options = tileOptions(opacity = 0.5)) |> 
     # display locality of interest only
-    addPolygons(data = bham_locality_boundaries |> filter(locality_name == locality),
+    addPolygons(data = bham_locality_boundaries |> filter(locality == loc),
                 color = border_colour,
                 weight = 4,
                 opacity = 1,
@@ -403,7 +403,7 @@ make_locality_ward_map <- function(locality) {
                 fillColor = "white",
                 options = pathOptions(pane = "localityPane")) |>
     # display IMD by LSOA for district of interest only
-    addPolygons(data = locality_lsoas |> filter(locality_name == locality),
+    addPolygons(data = locality_lsoas |> filter(locality == loc),
                 fillColor = ~imd25_pal(imd25_decile),
                 fillOpacity = 0.7,
                 color = ~imd25_pal(imd25_decile),
@@ -413,7 +413,7 @@ make_locality_ward_map <- function(locality) {
                 options = pathOptions(pane = "imdPane"),
                 group = "IMD 2025") |>
     # full wards text only
-    addPolygons(data = locality_wards_full |> filter(locality_name == locality),
+    addPolygons(data = locality_wards_full |> filter(locality == loc),
                 color = border_colour,
                 weight = 0,
                 opacity = 0,
@@ -427,7 +427,7 @@ make_locality_ward_map <- function(locality) {
                 options = pathOptions(pane = "wardsTextPane"),
                 group = "Full Wards") |>
     # full wards
-    addPolygons(data = locality_wards_full |> filter(locality_name == locality),
+    addPolygons(data = locality_wards_full |> filter(locality == loc),
                 color = border_colour,
                 weight = 1,
                 opacity = 1,
@@ -441,7 +441,7 @@ make_locality_ward_map <- function(locality) {
                 label = label_wards25_locality,
                 options = pathOptions(pane = "wardsPane"),
                 group = "Full Wards") |>
-    addMarkers(data = locality_gp_points |> filter(locality_name == locality),
+    addMarkers(data = locality_gp_points |> filter(locality == loc),
                label = ~surgery_name,
                group = "GP Surgeries",
                options = pathOptions(pane = "markersPane"),
@@ -483,9 +483,9 @@ make_locality_ward_map <- function(locality) {
     hideGroup("GP Surgeries")
 }
 
-make_locality_pcn_map <- function(locality){
+make_locality_pcn_map <- function(loc){
   locality_data <- bham_pcns |>
-    filter(locality_name == locality)
+    filter(locality == loc)
   
   label_pcn_GPs <- paste0(locality_data$prac_name, "<br>",
                           locality_data$pcn, "<br>",
@@ -500,7 +500,7 @@ make_locality_pcn_map <- function(locality){
   leaflet(locality_data,
           width = "100%", height = "650px") |> 
     addTiles(options = tileOptions(opacity = 0.5)) |>
-    addPolygons(data = bham_locality_boundaries |> filter(locality_name == locality),
+    addPolygons(data = bham_locality_boundaries |> filter(locality == loc),
                 color = border_colour,
                 weight = 4,
                 opacity = 1,

@@ -12,7 +12,13 @@ execute:
   warning: false
 ---
 
-These maps are intended to aid understanding of Birmingham's administrative boundaries - specifically, our wards, parliamentary constituencies, districts and localities. Information about deprivation (via IMD 2025 deciles) is also included for reference.
+This report has been designed to help policy-makers, commissioners, elected members and practitioners understand Birmingham's administrative boundaries - specifically, our wards, parliamentary constituencies, districts and localities.
+
+The interactions between these boundaries are complex. Sometimes they are coterminous, meaning they fit together exactly. Much of the time they are not. This means that, for example, a ward might be split across two or more districts.
+
+The maps help visualise where these overlaps occur. Understanding these overlaps is important for effective joint working and coordinated service delivery. A shared understanding supports better use of resources, and more informed planning.
+
+*Information about deprivation (via IMD 2025 deciles) is included at LSOA level to highlight the boundary of interest with a solid background, and for general reference.*
 
 ::: callout-note
 ## Note
@@ -28,6 +34,8 @@ All maps on this page are interactive. You can:
 
 This map allows you to explore Birmingham's wards, parliamentary constituencies, districts and localities.
 
+Note that "districts" are equivalent to pre-2024 parliamentary constituencies.
+
 ```{r geojson-data-import}
 library(tidyverse)
 library(sf)
@@ -35,23 +43,30 @@ library(leaflet)
 library(DT)
 library(readxl)
 
+# set tile opacity as variable
+tile_opacity <- 0.5
+
+# set file paths from .Renviron file
+shape_file_path <- Sys.getenv("shape_file_path")
+data_file_path <- Sys.getenv("data_file_path")
+
 # import data
 # local authority boundary
-bham_la24_boundaries <- read_sf("C:/Users/bccaengs/OneDrive - Birmingham City Council/Documents/Work/Useful datasets/Shape files/boundaries-la-districts-2024-wmca.geojson") |> 
+bham_la24_boundaries <- read_sf(paste0(shape_file_path, "boundaries-la-districts-2024-wmca.geojson")) |> 
   filter(lad24nm == "Birmingham")
 
 # 2024 constituencies
-bham_pcon24_boundaries <- read_sf("C:/Users/bccaengs/OneDrive - Birmingham City Council/Documents/Work/Useful datasets/Shape files/birmingham_constituencies_2024_bgc.geojson") |> 
+bham_pcon24_boundaries <- read_sf(paste0(shape_file_path, "birmingham_constituencies_2024_bgc.geojson")) |> 
   mutate(pcon24nm = str_replace(pcon24nm, "Birmingham ", ""))
 
 #districts
-bham_district22_boundaries <- read_sf("C:/Users/bccaengs/OneDrive - Birmingham City Council/Documents/Work/Useful datasets/Shape files/boundaries-constituencies-2022-wmca.geojson") |> 
+bham_district22_boundaries <- read_sf(paste0(shape_file_path, "boundaries-constituencies-2022-wmca.geojson")) |> 
   filter(local_authority_name == "Birmingham") |> 
   mutate(pcon22nm = str_replace(pcon22nm, "Birmingham, ", ""))
 
 # create localities from districts
 bham_locality_boundaries <- bham_district22_boundaries |> 
-  mutate(locality_name = case_when(pcon22nm == "Sutton Coldfield" ~ "North",
+  mutate(locality = case_when(pcon22nm == "Sutton Coldfield" ~ "North",
                               pcon22nm == "Erdington" ~ "North",
                               pcon22nm == "Perry Barr" ~ "West",
                               pcon22nm == "Ladywood" ~ "West",
@@ -61,15 +76,15 @@ bham_locality_boundaries <- bham_district22_boundaries |>
                               pcon22nm == "Northfield" ~ "South",
                               pcon22nm == "Hall Green" ~ "Central",
                               pcon22nm == "Selly Oak" ~ "Central")) |> 
-  group_by(locality_name) |> 
+  group_by(locality) |> 
   summarise(do_union = TRUE)
 
 # wards
-bham_ward25_boundaries <- read_sf("C:/Users/bccaengs/OneDrive - Birmingham City Council/Documents/Work/Useful datasets/Shape files/boundaries-wards-2025-wmca.geojson") |> 
+bham_ward25_boundaries <- read_sf(paste0(shape_file_path, "boundaries-wards-2025-wmca.geojson")) |> 
   filter(lad25nm == "Birmingham")
 
 # GPs
-bham_gp_points <- read_csv("C:/Users/bccaengs/OneDrive - Birmingham City Council/Documents/Work/Useful datasets/fingertips-gp-practices_bsol.csv") |> 
+bham_gp_points <- read_csv(paste0(data_file_path, "fingertips-gp-practices_bsol.csv")) |> 
   janitor::clean_names() |> 
   filter(grepl("Birmingham", constituency_name) | constituency_name == "Sutton Coldfield")
 
@@ -79,11 +94,12 @@ bham_gp_points <- st_as_sf(bham_gp_points,
                            crs = 4326)
 
 # LSOAs
-bham_lsoa21_boundaries <- read_sf("C:/Users/bccaengs/OneDrive - Birmingham City Council/Documents/Work/Useful datasets/Shape files/boundaries-lsoa21-bsol.geojson") |> 
+bham_lsoa21_boundaries <- read_sf(paste0(shape_file_path, "boundaries-lsoa21-bsol.geojson")) |>
   filter(local_authority_name == "Birmingham")
 
+
 # IMD 2025 by LSOA
-bham_imd25 <- read_csv("C:/Users/bccaengs/OneDrive - Birmingham City Council/Documents/Work/Useful datasets/IMD_2025_England.csv") |> 
+bham_imd25 <- read_csv(paste0(data_file_path, "IMD_2025_England.csv")) |> 
   janitor::clean_names() |> 
   filter(local_authority_district_name_2024 == "Birmingham") |> 
   select(lsoa_code_2021, index_of_multiple_deprivation_imd_decile_where_1_is_most_deprived_10_percent_of_lso_as) |> 
@@ -95,17 +111,18 @@ bham_imd25 <- bham_lsoa21_boundaries |>
             by = join_by("lsoa21cd" == "lsoa_code_2021"))
 
 # import pcn/gp/locality lookup
-bham_pcns <- read_excel("C:/Users/bccaengs/OneDrive - Birmingham City Council/Documents/Work/Useful datasets/bsol_gp_pcn_lookup.xlsx",
-                         skip = 5) |> 
+bham_pcns <- read_excel(paste0(data_file_path, "bsol_gp_pcn_lookup.xlsx"),
+                        skip = 5) |> 
   janitor::clean_names() |> 
   filter(!is.na(code)) |> 
   rename(locality_name = constituency_locality) |> 
   mutate(post_code = str_replace(post_code, "  ", " "))
 
 # import postcode lookup to get geopoints for PCNs
-postcode_lookup <- read_sf("C:/Users/bccaengs/OneDrive - Birmingham City Council/Documents/Work/Useful datasets/postcodes_wmca_dec25.geojson") |> 
+postcode_lookup <- read_sf(paste0(data_file_path, "postcodes_wmca_dec25.geojson")) |> 
   janitor::clean_names() |> 
   select(postcode, local_authority_name, geometry)
+
 
 # add geopoints to PCNs
 bham_pcns <- postcode_lookup |> 
@@ -127,7 +144,10 @@ label_wards25 <- paste0(bham_ward25_boundaries$wd25nm) |>
 label_wards25_wrap <- gsub("\n", "<br>", paste0(str_wrap(bham_ward25_boundaries$wd25nm, 10))) |> 
   lapply(htmltools::HTML)
 
-label_localities <- paste0(bham_locality_boundaries$locality_name) |> 
+label_pcons24 <- paste0(bham_pcon24_boundaries$pcon24nm)|> 
+  lapply(htmltools::HTML)
+
+label_localities <- paste0(bham_locality_boundaries$locality) |> 
   lapply(htmltools::HTML)
 
 label_GPs <- paste0(bham_gp_points$surgery_name)|> 
@@ -140,7 +160,7 @@ border_sub_colour <- "grey"
 ward_text_colour <- "black"
 pcon_text_colour <- "black"
 
-
+# create custom viridis palette
 viridis_pal <- viridisLite::viridis(10, begin = 0.4, end = 1)
 
 # set up fill palette for imd25
@@ -167,7 +187,8 @@ leaflet(width = "100%", height = "600px") |>
   addMapPane("clustersPane", zIndex = 2000) |>   # GP clusters (top)
   
   # Base tiles
-  addTiles(options = tileOptions(opacity = 0.5)) |>
+  addTiles(options = tileOptions(opacity = tile_opacity)) |>
+
   
   # Birmingham LA boundaries (optional pane if needed)
   addPolygons(data = bham_la24_boundaries,
@@ -344,7 +365,11 @@ leaflet(width = "100%", height = "600px") |>
   )
 ```
 
-# District-Ward Maps
+# Boundary Interaction Maps
+
+The following sections are intended to help visualise how the boundaries in the section above interact with one another.
+
+## District-Ward Interaction Maps
 
 These maps visualise the interaction between wards and districts in Birmingham. Some wards fit neatly inside a district boundary; others do not. Hovering over a ward will show you what proportion of that ward fits inside the district boundary.
 
@@ -459,7 +484,7 @@ make_district_ward_map <- function(district, zoom) {
     addMapPane("markersPane", zIndex = 700) |>   # GP markers
     addMapPane("clustersPane", zIndex = 2000) |>   # GP clusters (top)
     #addMapPane("clustersPane", zIndex = 2000) |>
-    addTiles(options = tileOptions(opacity = 0.5)) |> 
+    addTiles(options = tileOptions(opacity = tile_opacity)) |> 
     # display district of interest only
     addPolygons(data = bham_district22_boundaries |> filter(pcon22nm == district),
                 color = border_colour,
@@ -630,7 +655,7 @@ district_wards |>
 ```
 :::
 
-# Constituency-Ward Maps
+## Constituency-Ward Interaction Maps
 
 These maps visualise the interaction between wards and parliamentary constituencies in Birmingham. Some wards fit neatly inside a constituency boundary; others do not. Hovering over a ward will show you what proportion of that ward fits inside the constituency boundary.
 
@@ -744,7 +769,7 @@ make_pcon_ward_map <- function(pcon, zoom) {
     addMapPane("wardsPane", zIndex = 400) |>     # Wards
     addMapPane("markersPane", zIndex = 700) |>   # GP markers
     addMapPane("clustersPane", zIndex = 2000) |>   # GP clusters (top)
-    addTiles(options = tileOptions(opacity = 0.5)) |> 
+    addTiles(options = tileOptions(opacity = tile_opacity)) |> 
     # display pcon of interest only
     addPolygons(data = bham_pcon24_boundaries |> filter(pcon24nm == pcon),
                 color = border_colour,
@@ -915,7 +940,7 @@ pcon_wards |>
 ```
 :::
 
-# Locality-Ward Maps
+## Locality-Ward Interaction Maps
 
 These maps visualise the interaction between wards and localities in Birmingham. Some wards fit neatly inside a locality boundary; others do not. Hovering over a ward will show you what proportion of that ward fits inside the locality boundary.
 
@@ -927,14 +952,14 @@ locality_wards <- data.frame()
 
 sf_use_s2(FALSE)
 
-localities <- bham_locality_boundaries$locality_name
+localities <- bham_locality_boundaries$locality
 
-for (locality in localities) {
+for (loc in localities) {
   # clip wards inside district boundary
   temp_locality_wards <- bham_locality_boundaries |> 
-    filter(locality_name == locality)|> 
+    filter(locality == loc)|> 
     st_intersection(bham_ward25_boundaries) |> 
-    mutate(locality_name = locality)
+    mutate(locality = loc)
   
   # find out the area of each clipped ward
   temp_locality_wards$area <- st_area(temp_locality_wards)
@@ -942,7 +967,7 @@ for (locality in localities) {
   # pull out unclipped wards for this locality
   temp_locality_wards_full <- bham_ward25_boundaries |> 
     filter(wd25cd %in% temp_locality_wards$wd25cd) |> 
-    mutate(locality_name = locality)
+    mutate(locality = loc)
   
   # find area of unclipped ward and add to clipped ward sf
   temp_locality_wards$full_area <- st_area(temp_locality_wards_full)
@@ -956,7 +981,7 @@ for (locality in localities) {
   # recalculate unclipped wards now wards with <1% are excluded
  temp_locality_wards_full <- bham_ward25_boundaries |> 
     filter(wd25cd %in% temp_locality_wards$wd25cd) |> 
-   mutate(locality_name = locality)
+   mutate(locality = loc)
  
  # append temp dfs to main df
  locality_wards_full <- rbind(locality_wards_full,
@@ -969,40 +994,40 @@ for (locality in localities) {
 # locality lsoa maps
 locality_lsoas <- data.frame()
 
-for (locality in localities) {
+for (loc in localities) {
   # clip wards inside locality boundary
   temp_locality_lsoas <- bham_locality_boundaries |> 
-    filter(locality_name == locality)|> 
+    filter(locality == loc)|> 
     st_intersection(bham_imd25) |> 
-    mutate(locality_name = locality)
+    mutate(locality = loc)
 
   locality_lsoas <- rbind(locality_lsoas,
                           temp_locality_lsoas)
 }
 
-# filter to get gps which fall within each locality boundary
-locality_gp_points <- data.frame()
-
-for (locality in localities) {
-  temp_locality_gp_list <- bham_locality_boundaries |> 
-    filter(locality_name == locality) |> 
-    st_contains(bham_gp_points)
-  
-  temp_locality_gp_list <- temp_locality_gp_list[[1]]
-  
-  temp_locality_gp_points <- bham_gp_points |> 
-    filter(row_number() %in% temp_locality_gp_list) |> 
-    mutate(locality_name = locality)
-  
-  locality_gp_points <- rbind(locality_gp_points,
-                              temp_locality_gp_points)
-}
+# # filter to get gps which fall within each locality boundary
+# locality_gp_points <- data.frame()
+# 
+# for (loc in localities) {
+#   temp_locality_gp_list <- bham_locality_boundaries |> 
+#     filter(locality == loc) |> 
+#     st_contains(bham_gp_points)
+#   
+#   temp_locality_gp_list <- temp_locality_gp_list[[1]]
+#   
+#   temp_locality_gp_points <- bham_gp_points |> 
+#     filter(row_number() %in% temp_locality_gp_list) |> 
+#     mutate(locality = loc)
+#   
+#   locality_gp_points <- rbind(locality_gp_points,
+#                               temp_locality_gp_points)
+# }
 
 # function for making locality maps
-make_locality_ward_map <- function(locality) {
+make_locality_ward_map <- function(loc) {
   # wrapped ward names for district map
   label_wards25_wrap_locality <- locality_wards |> 
-    filter(locality_name == locality) |> 
+    filter(locality == loc) |> 
     pull(wd25nm) |> 
     str_wrap(15)
   label_wards25_wrap_locality<- gsub("\n", "<br>", label_wards25_wrap_locality) |> 
@@ -1010,9 +1035,9 @@ make_locality_ward_map <- function(locality) {
   
   # labels with % inside locality for locality map
   label_wards25_locality <- locality_wards |> 
-    filter(locality_name == locality) |> 
+    filter(locality == loc) |> 
     mutate(label = paste0(wd25nm, "<br>",
-                          round(pct, 0), "% falls within ", locality_name, " locality")) |> 
+                          round(pct, 0), "% falls within ", locality, " locality")) |> 
     pull(label) |> 
     lapply(htmltools::HTML)
   
@@ -1025,9 +1050,9 @@ make_locality_ward_map <- function(locality) {
     addMapPane("wardsPane", zIndex = 400) |>     # Wards
     addMapPane("markersPane", zIndex = 700) |>   # GP markers
     addMapPane("clustersPane", zIndex = 2000) |>   # GP clusters (top)
-    addTiles(options = tileOptions(opacity = 0.5)) |> 
+    addTiles(options = tileOptions(opacity = tile_opacity)) |> 
     # display locality of interest only
-    addPolygons(data = bham_locality_boundaries |> filter(locality_name == locality),
+    addPolygons(data = bham_locality_boundaries |> filter(locality == loc),
                 color = border_colour,
                 weight = 4,
                 opacity = 1,
@@ -1035,7 +1060,7 @@ make_locality_ward_map <- function(locality) {
                 fillColor = "white",
                 options = pathOptions(pane = "localityPane")) |>
     # display IMD by LSOA for district of interest only
-    addPolygons(data = locality_lsoas |> filter(locality_name == locality),
+    addPolygons(data = locality_lsoas |> filter(locality == loc),
                 fillColor = ~imd25_pal(imd25_decile),
                 fillOpacity = 0.7,
                 color = ~imd25_pal(imd25_decile),
@@ -1045,7 +1070,7 @@ make_locality_ward_map <- function(locality) {
                 options = pathOptions(pane = "imdPane"),
                 group = "IMD 2025") |>
     # full wards text only
-    addPolygons(data = locality_wards_full |> filter(locality_name == locality),
+    addPolygons(data = locality_wards_full |> filter(locality == loc),
                 color = border_colour,
                 weight = 0,
                 opacity = 0,
@@ -1059,7 +1084,7 @@ make_locality_ward_map <- function(locality) {
                 options = pathOptions(pane = "wardsTextPane"),
                 group = "Full Wards") |>
     # full wards
-    addPolygons(data = locality_wards_full |> filter(locality_name == locality),
+    addPolygons(data = locality_wards_full |> filter(locality == loc),
                 color = border_colour,
                 weight = 1,
                 opacity = 1,
@@ -1073,7 +1098,7 @@ make_locality_ward_map <- function(locality) {
                 label = label_wards25_locality,
                 options = pathOptions(pane = "wardsPane"),
                 group = "Full Wards") |>
-  #   addMarkers(data = locality_gp_points |> filter(locality_name == locality),
+  #   addMarkers(data = locality_gp_points |> filter(locality == loc),
   #              label = ~surgery_name,
   #              group = "GP Surgeries",
   #              options = pathOptions(pane = "markersPane"),
@@ -1150,12 +1175,12 @@ make_locality_ward_map("Central")
 ```{r locality-ward-table}
 locality_wards |> 
   as_tibble() |> 
-  select(wd25nm, locality_name, pct) |> 
+  select(wd25nm, locality, pct) |> 
   arrange(wd25nm) |> 
   mutate(pct = round(pct, 0),
          pct = paste0(pct, "%")) |> 
   rename(`Ward name` = wd25nm,
-         `Locality name` = locality_name,
+         `Locality name` = locality,
          `% of ward in locality` = pct) |> 
   datatable(rownames = F,
             filter = "top",
@@ -1164,7 +1189,224 @@ locality_wards |>
 ```
 :::
 
-# Locality-Constituency Maps
+## Locality-District Interaction Maps
+
+These maps visualise the interaction between districts and localities in Birmingham. This is a rare case where all districts are coterminous with locality boundaries. There are two districts in each locality.
+
+Use the tabs to move between localities. A table is provided in the final tab as a quick lookup between localities and districts - this can be filtered or sorted as needed.
+
+```{r locality-district-map-setup}
+locality_districts_full <- data.frame()
+locality_districts <- data.frame()
+
+sf_use_s2(FALSE)
+
+localities <- bham_locality_boundaries$locality
+
+for (loc in localities) {
+  # clip pcons inside district boundary
+  temp_locality_districts <- bham_locality_boundaries |> 
+    filter(locality == loc)|> 
+    st_intersection(bham_district22_boundaries) |> 
+    mutate(locality = loc)
+  
+  # find out the area of each clipped pcon
+  temp_locality_districts$area <- st_area(temp_locality_districts)
+  
+  # pull out unclipped pcons for this locality
+  temp_locality_districts_full <- bham_district22_boundaries |> 
+    filter(pcon22nm %in% temp_locality_districts$pcon22nm) |> 
+    mutate(locality = loc)
+  
+  # find area of unclipped pcon and add to clipped pcon sf
+  temp_locality_districts$full_area <- st_area(temp_locality_districts_full)
+  
+  # calulate what % of each pcon is inside the boundary
+  # then filter out pcons with less than 1% area inside boundary
+  temp_locality_districts <- temp_locality_districts |> 
+    mutate(pct = area/full_area*100) |> 
+    filter(as.numeric(pct) > 1)
+  
+  # recalculate unclipped pcons now pcons with <1% are excluded
+  temp_locality_districts_full <- bham_district22_boundaries |> 
+    filter(pcon22nm %in% temp_locality_districts$pcon22nm) |> 
+    mutate(locality = loc)
+  
+  # append temp dfs to main df
+  locality_districts_full <- rbind(locality_districts_full,
+                               temp_locality_districts_full)
+  
+  locality_districts <- rbind(locality_districts,
+                          temp_locality_districts)
+}
+
+# function for making locality maps
+make_locality_district_map <- function(loc) {
+  # wrapped pcon names for district map
+  label_district_wrap_locality <- locality_districts |> 
+    filter(locality == loc) |> 
+    pull(pcon22nm) |> 
+    str_wrap(15)
+  label_district_wrap_locality<- gsub("\n", "<br>", label_district_wrap_locality) |> 
+    lapply(htmltools::HTML)
+  
+  # labels with % inside locality for locality map
+  label_district_locality <- locality_districts |> 
+    filter(locality == loc) |> 
+    mutate(label = paste0(pcon22nm, " district", "<br>",
+                          round(pct, 0), "% falls within ", locality, " locality")) |> 
+    pull(label) |> 
+    lapply(htmltools::HTML)
+  
+  # gp labels for locality map
+  
+  leaflet(width = "100%", height = "650px") |> 
+    addMapPane("localityPane", zIndex = 200) |>       # LA boundary layer
+    addMapPane("imdPane", zIndex = 300) |>       # IMD layer (bottom)
+    addMapPane("pconsTextPane", zIndex = 350) |>
+    addMapPane("pconsPane", zIndex = 400) |>     # pcons
+    addMapPane("markersPane", zIndex = 700) |>   # GP markers
+    addMapPane("clustersPane", zIndex = 2000) |>   # GP clusters (top)
+    addTiles(options = tileOptions(opacity = tile_opacity)) |> 
+    # display locality of interest only
+    addPolygons(data = bham_locality_boundaries |> filter(locality == loc),
+                color = border_colour,
+                weight = 4,
+                opacity = 1,
+                fillOpacity = 0.6,
+                fillColor = "white",
+                options = pathOptions(pane = "localityPane")) |>
+    # display IMD by LSOA for locality of interest only
+    addPolygons(data = locality_lsoas |> filter(locality == loc),
+                fillColor = ~imd25_pal(imd25_decile),
+                fillOpacity = 0.7,
+                color = ~imd25_pal(imd25_decile),
+                weight = 1,
+                opacity = 0.2,
+                stroke = F,
+                options = pathOptions(pane = "imdPane"),
+                group = "IMD 2025") |>
+    # full pcons text only
+    addPolygons(data = locality_districts_full |> filter(locality == loc),
+                color = border_colour,
+                weight = 0,
+                opacity = 0,
+                fillOpacity = 0,
+                fillColor = "white",
+                label = label_district_wrap_locality,
+                labelOptions = labelOptions(noHide = T, textOnly = T, opacity = 1,
+                                            style = list("font-family" ="Arial", "font-weight" = "bold", "color" = pcon_text_colour),
+                                            textsize = "8px",
+                                            direction = "center"),
+                options = pathOptions(pane = "pconsTextPane"),
+                group = "Full pcons") |>
+    # full pcons
+    addPolygons(data = locality_districts_full |> filter(locality == loc),
+                color = border_colour,
+                weight = 1,
+                opacity = 1,
+                fillOpacity = 0,
+                fillColor = "white",
+                highlightOptions = highlightOptions(
+                  weight = 3,
+                  color = highlight_colour,
+                  bringToFront = TRUE,
+                  sendToBack = F),
+                label = label_district_locality,
+                options = pathOptions(pane = "pconsPane"),
+                group = "Full pcons") |>
+  #   addMarkers(data = locality_gp_points |> filter(locality == loc),
+  #              label = ~surgery_name,
+  #              group = "GP Surgeries",
+  #              options = pathOptions(pane = "markersPane"),
+  #              clusterOptions = markerClusterOptions(
+  #                pane = "clustersPane",  # Keep clusters above labels
+  #                iconCreateFunction = JS("
+  #   function (cluster) {
+  #     var count = cluster.getChildCount();
+  #     
+  #     // Dynamic size based on count
+  #     var size = count < 10 ? 40 : (count < 20 ? 50 : 60);
+  #     var innerSize = size * 0.7; // Inner circle smaller
+  #     
+  #     var color = '#D00070'; // Fixed color for all clusters
+  #     
+  #     return new L.DivIcon({
+  #       html: '<div style=\"position:relative; width:' + size + 'px; height:' + size + 'px;\">' +
+  #               '<div style=\"background-color:' + color + '; opacity:0.4; border-radius:50%; width:' + size + 'px; height:' + size + 'px; position:absolute; top:0; left:0;\"></div>' +
+  #               '<div style=\"background-color:' + color + '; color:white; border-radius:50%; width:' + innerSize + 'px; height:' + innerSize + 'px; position:absolute; top:' + ((size - innerSize)/2) + 'px; left:' + ((size - innerSize)/2) + 'px; display:flex; align-items:center; justify-content:center; font-weight:bold;\">' + count + '</div>' +
+  #             '</div>',
+  #       className: 'marker-cluster',
+  #       iconSize: [size, size],
+  #       pane: 'clustersPane'
+  #     });
+  #   }
+  # ")
+  #              )) |>
+    addLegend(data = locality_lsoas,
+              "bottomright", 
+              pal = imd25_pal, 
+              values = ~imd25_decile,
+              title = "IMD 2025 Decile",
+              labFormat = labelFormat(prefix = "Decile "),
+              opacity = 0.5) |> 
+    #setView(lat = 52.4491, lng = -1.96463, zoom = 13) |> 
+    addLayersControl(
+      overlayGroups = c("IMD 2025"))
+}
+```
+
+::: panel-tabset
+## North
+
+```{r north-district-map}
+make_locality_district_map("North")
+```
+
+## East
+
+```{r East-district-map}
+make_locality_district_map("East")
+```
+
+## South
+
+```{r South-district-map}
+make_locality_district_map("South")
+```
+
+## West
+
+```{r West-district-map}
+make_locality_district_map("West")
+```
+
+## Central
+
+```{r Central-district-map}
+make_locality_district_map("Central")
+```
+
+## Table
+
+```{r locality-district-table}
+locality_districts |> 
+  as_tibble() |> 
+  select(pcon22nm, locality, pct) |> 
+  arrange(pcon22nm) |> 
+  mutate(pct = round(pct, 0),
+         pct = paste0(pct, "%")) |> 
+  rename(`District name` = pcon22nm,
+         `Locality name` = locality,
+         `% of district in locality` = pct) |> 
+  datatable(rownames = F,
+            filter = "top",
+            options = list(pageLength = 15,
+                           autoWidth = TRUE))
+```
+:::
+
+## Locality-Constituency Interaction Maps
 
 These maps visualise the interaction between 2024 parliamentary constituencies and localities in Birmingham. Some constituencies fit neatly inside a locality boundary; others do not. Hovering over a constituency will show you what proportion of that constituency fits inside the locality boundary.
 
@@ -1176,14 +1418,14 @@ locality_pcons <- data.frame()
 
 sf_use_s2(FALSE)
 
-localities <- bham_locality_boundaries$locality_name
+localities <- bham_locality_boundaries$locality
 
-for (locality in localities) {
+for (loc in localities) {
   # clip pcons inside district boundary
   temp_locality_pcons <- bham_locality_boundaries |> 
-    filter(locality_name == locality)|> 
+    filter(locality == loc)|> 
     st_intersection(bham_pcon24_boundaries) |> 
-    mutate(locality_name = locality)
+    mutate(locality = loc)
   
   # find out the area of each clipped pcon
   temp_locality_pcons$area <- st_area(temp_locality_pcons)
@@ -1191,7 +1433,7 @@ for (locality in localities) {
   # pull out unclipped pcons for this locality
   temp_locality_pcons_full <- bham_pcon24_boundaries |> 
     filter(pcon24nm %in% temp_locality_pcons$pcon24nm) |> 
-    mutate(locality_name = locality)
+    mutate(locality = loc)
   
   # find area of unclipped pcon and add to clipped pcon sf
   temp_locality_pcons$full_area <- st_area(temp_locality_pcons_full)
@@ -1205,7 +1447,7 @@ for (locality in localities) {
   # recalculate unclipped pcons now pcons with <1% are excluded
   temp_locality_pcons_full <- bham_pcon24_boundaries |> 
     filter(pcon24nm %in% temp_locality_pcons$pcon24nm) |> 
-    mutate(locality_name = locality)
+    mutate(locality = loc)
   
   # append temp dfs to main df
   locality_pcons_full <- rbind(locality_pcons_full,
@@ -1216,10 +1458,10 @@ for (locality in localities) {
 }
 
 # function for making locality maps
-make_locality_pcon_map <- function(locality) {
+make_locality_pcon_map <- function(loc) {
   # wrapped pcon names for district map
   label_pcons24_wrap_locality <- locality_pcons |> 
-    filter(locality_name == locality) |> 
+    filter(locality == loc) |> 
     pull(pcon24nm) |> 
     str_wrap(15)
   label_pcons24_wrap_locality<- gsub("\n", "<br>", label_pcons24_wrap_locality) |> 
@@ -1227,9 +1469,9 @@ make_locality_pcon_map <- function(locality) {
   
   # labels with % inside locality for locality map
   label_pcons24_locality <- locality_pcons |> 
-    filter(locality_name == locality) |> 
+    filter(locality == loc) |> 
     mutate(label = paste0(pcon24nm, " constituency", "<br>",
-                          round(pct, 0), "% falls within ", locality_name, " locality")) |> 
+                          round(pct, 0), "% falls within ", locality, " locality")) |> 
     pull(label) |> 
     lapply(htmltools::HTML)
   
@@ -1242,9 +1484,9 @@ make_locality_pcon_map <- function(locality) {
     addMapPane("pconsPane", zIndex = 400) |>     # pcons
     addMapPane("markersPane", zIndex = 700) |>   # GP markers
     addMapPane("clustersPane", zIndex = 2000) |>   # GP clusters (top)
-    addTiles(options = tileOptions(opacity = 0.5)) |> 
+    addTiles(options = tileOptions(opacity = tile_opacity)) |> 
     # display locality of interest only
-    addPolygons(data = bham_locality_boundaries |> filter(locality_name == locality),
+    addPolygons(data = bham_locality_boundaries |> filter(locality == loc),
                 color = border_colour,
                 weight = 4,
                 opacity = 1,
@@ -1252,7 +1494,7 @@ make_locality_pcon_map <- function(locality) {
                 fillColor = "white",
                 options = pathOptions(pane = "localityPane")) |>
     # display IMD by LSOA for district of interest only
-    addPolygons(data = locality_lsoas |> filter(locality_name == locality),
+    addPolygons(data = locality_lsoas |> filter(locality == loc),
                 fillColor = ~imd25_pal(imd25_decile),
                 fillOpacity = 0.7,
                 color = ~imd25_pal(imd25_decile),
@@ -1262,7 +1504,7 @@ make_locality_pcon_map <- function(locality) {
                 options = pathOptions(pane = "imdPane"),
                 group = "IMD 2025") |>
     # full pcons text only
-    addPolygons(data = locality_pcons_full |> filter(locality_name == locality),
+    addPolygons(data = locality_pcons_full |> filter(locality == loc),
                 color = border_colour,
                 weight = 0,
                 opacity = 0,
@@ -1276,7 +1518,7 @@ make_locality_pcon_map <- function(locality) {
                 options = pathOptions(pane = "pconsTextPane"),
                 group = "Full pcons") |>
     # full pcons
-    addPolygons(data = locality_pcons_full |> filter(locality_name == locality),
+    addPolygons(data = locality_pcons_full |> filter(locality == loc),
                 color = border_colour,
                 weight = 1,
                 opacity = 1,
@@ -1290,7 +1532,7 @@ make_locality_pcon_map <- function(locality) {
                 label = label_pcons24_locality,
                 options = pathOptions(pane = "pconsPane"),
                 group = "Full pcons") |>
-  #   addMarkers(data = locality_gp_points |> filter(locality_name == locality),
+  #   addMarkers(data = locality_gp_points |> filter(locality == loc),
   #              label = ~surgery_name,
   #              group = "GP Surgeries",
   #              options = pathOptions(pane = "markersPane"),
@@ -1367,12 +1609,12 @@ make_locality_pcon_map("Central")
 ```{r locality-pcon-table}
 locality_pcons |> 
   as_tibble() |> 
-  select(pcon24nm, locality_name, pct) |> 
+  select(pcon24nm, locality, pct) |> 
   arrange(pcon24nm) |> 
   mutate(pct = round(pct, 0),
          pct = paste0(pct, "%")) |> 
   rename(`Constituency name` = pcon24nm,
-         `Locality name` = locality_name,
+         `Locality name` = locality,
          `% of constituency in locality` = pct) |> 
   datatable(rownames = F,
             filter = "top",
@@ -1381,16 +1623,16 @@ locality_pcons |>
 ```
 :::
 
-# Locality-PCN Maps
+## Locality-PCN Interaction Maps
 
 These maps visualise the interaction between primary care networks (PCNs) and their assigned localities in Birmingham. Individual GP practices are shown and coloured according to their PCN. Some practices fall inside their PCN's assigned locality; others do not. Hovering over a point will show you the GP practice name, PCN and type (main/branch).
 
 Use the tabs to move between localities. The table in the final tab provides a summary of how many practices fall outside of their assigned locality, by locality and PCN - this can be filtered or sorted as needed.
 
 ```{r locality-pcn-map-setup}
-make_locality_pcn_map <- function(locality){
+make_locality_pcn_map <- function(loc){
   locality_data <- bham_pcns |>
-    filter(locality_name == locality)
+    filter(locality_name == loc)
   
   label_pcn_GPs <- paste0(locality_data$prac_name, "<br>",
                           locality_data$pcn, "<br>",
@@ -1404,8 +1646,8 @@ make_locality_pcn_map <- function(locality){
   
   leaflet(locality_data,
           width = "100%", height = "650px") |> 
-    addTiles(options = tileOptions(opacity = 0.5)) |>
-    addPolygons(data = bham_locality_boundaries |> filter(locality_name == locality),
+    addTiles(options = tileOptions(opacity = tile_opacity)) |>
+    addPolygons(data = bham_locality_boundaries |> filter(locality == loc),
                 color = border_colour,
                 weight = 4,
                 opacity = 1,
@@ -1462,16 +1704,16 @@ make_locality_pcn_map("Central")
 ```{r locality-pcn-table}
 locality_pcn_table <- data.frame()
 
-for (locality in localities){
+for (loc in localities){
   temp_locality_pcns <- bham_pcns |>
-    filter(locality_name == locality)
+    filter(locality_name == loc)
   
   temp_locality_pcn_matrix <- bham_locality_boundaries |>
-    filter(locality_name == locality) |> 
+    filter(locality == loc) |> 
     st_contains(temp_locality_pcns,
                 sparse = F)
   
-  row.names(temp_locality_pcn_matrix) <- locality
+  row.names(temp_locality_pcn_matrix) <- loc
   
   colnames(temp_locality_pcn_matrix) <- temp_locality_pcns$prac_name
   

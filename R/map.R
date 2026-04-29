@@ -4,17 +4,21 @@ library(leaflet)
 library(DT)
 library(readxl)
 
+# set file paths from .Renviron file
+shape_file_path <- Sys.getenv("shape_file_path")
+data_file_path <- Sys.getenv("data_file_path")
+
 # import data
 # local authority boundary
-bham_la24_boundaries <- read_sf("C:/Users/bccaengs/OneDrive - Birmingham City Council/Documents/Work/Useful datasets/Shape files/boundaries-la-districts-2024-wmca.geojson") |> 
+bham_la24_boundaries <- read_sf(paste0(shape_file_path, "boundaries-la-districts-2024-wmca.geojson")) |> 
   filter(lad24nm == "Birmingham")
 
 # 2024 constituencies
-bham_pcon24_boundaries <- read_sf("C:/Users/bccaengs/OneDrive - Birmingham City Council/Documents/Work/Useful datasets/Shape files/birmingham_constituencies_2024_bgc.geojson") |> 
+bham_pcon24_boundaries <- read_sf(paste0(shape_file_path, "birmingham_constituencies_2024_bgc.geojson")) |> 
   mutate(pcon24nm = str_replace(pcon24nm, "Birmingham ", ""))
 
 #districts
-bham_district22_boundaries <- read_sf("C:/Users/bccaengs/OneDrive - Birmingham City Council/Documents/Work/Useful datasets/Shape files/boundaries-constituencies-2022-wmca.geojson") |> 
+bham_district22_boundaries <- read_sf(paste0(shape_file_path, "boundaries-constituencies-2022-wmca.geojson")) |> 
   filter(local_authority_name == "Birmingham") |> 
   mutate(pcon22nm = str_replace(pcon22nm, "Birmingham, ", ""))
 
@@ -34,11 +38,11 @@ bham_locality_boundaries <- bham_district22_boundaries |>
   summarise(do_union = TRUE)
 
 # wards
-bham_ward25_boundaries <- read_sf("C:/Users/bccaengs/OneDrive - Birmingham City Council/Documents/Work/Useful datasets/Shape files/boundaries-wards-2025-wmca.geojson") |> 
+bham_ward25_boundaries <- read_sf(paste0(shape_file_path, "boundaries-wards-2025-wmca.geojson")) |> 
   filter(lad25nm == "Birmingham")
 
 # GPs
-bham_gp_points <- read_csv("C:/Users/bccaengs/OneDrive - Birmingham City Council/Documents/Work/Useful datasets/fingertips-gp-practices_bsol.csv") |> 
+bham_gp_points <- read_csv(paste0(data_file_path, "fingertips-gp-practices_bsol.csv")) |> 
   janitor::clean_names() |> 
   filter(grepl("Birmingham", constituency_name) | constituency_name == "Sutton Coldfield")
 
@@ -48,12 +52,12 @@ bham_gp_points <- st_as_sf(bham_gp_points,
                            crs = 4326)
 
 # LSOAs
-bham_lsoa21_boundaries <- read_sf("C:/Users/bccaengs/OneDrive - Birmingham City Council/Documents/Work/Useful datasets/Shape files/boundaries-lsoa21-bsol.geojson") |>
+bham_lsoa21_boundaries <- read_sf(paste0(shape_file_path, "boundaries-lsoa21-bsol.geojson")) |>
   filter(local_authority_name == "Birmingham")
 
 
 # IMD 2025 by LSOA
-bham_imd25 <- read_csv("C:/Users/bccaengs/OneDrive - Birmingham City Council/Documents/Work/Useful datasets/IMD_2025_England.csv") |> 
+bham_imd25 <- read_csv(paste0(data_file_path, "IMD_2025_England.csv")) |> 
   janitor::clean_names() |> 
   filter(local_authority_district_name_2024 == "Birmingham") |> 
   select(lsoa_code_2021, index_of_multiple_deprivation_imd_decile_where_1_is_most_deprived_10_percent_of_lso_as) |> 
@@ -65,15 +69,15 @@ bham_imd25 <- bham_lsoa21_boundaries |>
             by = join_by("lsoa21cd" == "lsoa_code_2021"))
 
 # import pcn/gp/locality lookup
-bham_pcns <- read_excel("C:/Users/bccaengs/OneDrive - Birmingham City Council/Documents/Work/Useful datasets/bsol_gp_pcn_lookup.xlsx",
-                         skip = 5) |> 
+bham_pcns <- read_excel(paste0(data_file_path, "bsol_gp_pcn_lookup.xlsx"),
+                        skip = 5) |> 
   janitor::clean_names() |> 
   filter(!is.na(code)) |> 
   rename(locality_name = constituency_locality) |> 
   mutate(post_code = str_replace(post_code, "  ", " "))
 
 # import postcode lookup to get geopoints for PCNs
-postcode_lookup <- read_sf("C:/Users/bccaengs/OneDrive - Birmingham City Council/Documents/Work/Useful datasets/postcodes_wmca_dec25.geojson") |> 
+postcode_lookup <- read_sf(paste0(data_file_path, "postcodes_wmca_dec25.geojson")) |> 
   janitor::clean_names() |> 
   select(postcode, local_authority_name, geometry)
 
@@ -95,7 +99,10 @@ label_wards25 <- paste0(bham_ward25_boundaries$wd25nm) |>
 label_wards25_wrap <- gsub("\n", "<br>", paste0(str_wrap(bham_ward25_boundaries$wd25nm, 10))) |> 
   lapply(htmltools::HTML)
 
-label_localities <- paste0(bham_locality_boundaries$locality_name) |> 
+label_pcons24 <- paste0(bham_pcon24_boundaries$pcon24nm)|> 
+  lapply(htmltools::HTML)
+
+label_localities <- paste0(bham_locality_boundaries$locality) |> 
   lapply(htmltools::HTML)
 
 label_GPs <- paste0(bham_gp_points$surgery_name)|> 
@@ -513,17 +520,14 @@ locality_pcons <- data.frame()
 
 sf_use_s2(FALSE)
 
-localities <- bham_locality_boundaries$locality_name
+localities <- bham_locality_boundaries$locality
 
-bham_locality_boundaries <- bham_locality_boundaries |> 
-  rename(locality_name = locality)
-
-for (locality in localities) {
+for (loc in localities) {
   # clip pcons inside district boundary
   temp_locality_pcons <- bham_locality_boundaries |> 
-    filter(locality_name == locality)|> 
+    filter(locality == loc)|> 
     st_intersection(bham_pcon24_boundaries) |> 
-    mutate(locality_name = locality)
+    mutate(locality = loc)
   
   # find out the area of each clipped pcon
   temp_locality_pcons$area <- st_area(temp_locality_pcons)
@@ -531,7 +535,7 @@ for (locality in localities) {
   # pull out unclipped pcons for this locality
   temp_locality_pcons_full <- bham_pcon24_boundaries |> 
     filter(pcon24nm %in% temp_locality_pcons$pcon24nm) |> 
-    mutate(locality_name = locality)
+    mutate(locality = loc)
   
   # find area of unclipped pcon and add to clipped pcon sf
   temp_locality_pcons$full_area <- st_area(temp_locality_pcons_full)
@@ -545,7 +549,7 @@ for (locality in localities) {
   # recalculate unclipped pcons now pcons with <1% are excluded
   temp_locality_pcons_full <- bham_pcon24_boundaries |> 
     filter(pcon24nm %in% temp_locality_pcons$pcon24nm) |> 
-    mutate(locality_name = locality)
+    mutate(locality = loc)
   
   # append temp dfs to main df
   locality_pcons_full <- rbind(locality_pcons_full,
@@ -562,7 +566,7 @@ pcon_text_colour <- "black"
 
 # get pcns in north locality only
 north_data <- bham_pcns |>
-  filter(locality_name == "North")
+  filter(locality == "North")
 
 # set up labels
 label_pcn_GPs <- paste0(north_data$prac_name, "<br>",
@@ -579,7 +583,7 @@ pal <- colorFactor(
 # plot map of just PCNs in North locality, and North locality boundaries
 leaflet(north_data) |> 
   addTiles(options = tileOptions(opacity = 0.5)) |>
-  addPolygons(data = bham_locality_boundaries |> filter(locality_name == "North"),
+  addPolygons(data = bham_locality_boundaries |> filter(locality == "North"),
               color = border_colour,
               weight = 4,
               opacity = 1,
@@ -605,52 +609,43 @@ leaflet(north_data) |>
 # set up empty df
 locality_pcn_table <- data.frame()
 
-# loop throgh list of localities
-for (locality in localities){
-  # find pcns belonging to a locality
+for (loc in localities){
   temp_locality_pcns <- bham_pcns |>
-    filter(locality_name == locality)
+    filter(locality_name == loc)
   
-  # create a matrix of whether each practice actually falls inside the locality boundaries (TRUE/FALSE)
   temp_locality_pcn_matrix <- bham_locality_boundaries |>
-    filter(locality_name == locality) |> 
+    filter(locality == loc) |> 
     st_contains(temp_locality_pcns,
                 sparse = F)
   
-  # use locality as row name
-  row.names(temp_locality_pcn_matrix) <- locality
+  row.names(temp_locality_pcn_matrix) <- loc
   
-  # use practices as column names
   colnames(temp_locality_pcn_matrix) <- temp_locality_pcns$prac_name
   
-  # convert to matrix and pivot longer so there are three columns:
-  # locality, practice name and whether in locality (T/F)
   temp_locality_pcn_matrix <- temp_locality_pcn_matrix |> 
     as_tibble(rownames = "locality_name") |> 
     pivot_longer(cols = !locality_name,
                  names_to = "prac_name",
                  values_to = "in_locality")
   
-  # bind this to the main df
   locality_pcn_table <- rbind(locality_pcn_table,
                               temp_locality_pcn_matrix)
 }
 
-# output full df as interactive table
-locality_pcn_table |> 
-  left_join(bham_pcns,
-            by = c("locality_name", "prac_name")) |> 
-  select(locality_name, pcn, prac_name, in_locality) |> 
-  rename(`Locality` = locality_name,
-         PCN = pcn,
-         `Practice Name` = prac_name,
-         `Falls inside assigned locality` = in_locality) |> 
-  datatable(rownames = F,
-            filter = "top",
-            options = list(pageLength = 15,
-                           autoWidth = TRUE))
+# locality_pcn_table |> 
+#   left_join(bham_pcns,
+#             by = c("locality_name", "prac_name")) |> 
+#   select(locality_name, pcn, prac_name, in_locality) |> 
+#   rename(`Locality` = locality_name,
+#          PCN = pcn,
+#          `Practice Name` = prac_name,
+#          `Falls inside assigned locality` = in_locality) |> 
+#   datatable(rownames = F,
+#             filter = "top",
+#             options = list(pageLength = 15,
+#                            autoWidth = TRUE))
 
-# output df to show PCNs and % within locality
+
 locality_pcn_table |> 
   left_join(bham_pcns,
             by = c("locality_name", "prac_name")) |> 
