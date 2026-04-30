@@ -21,10 +21,12 @@ proposed_bham_districts <- bham_ward25_boundaries |>
 
 # show districts on map
 # first convert Selly Oak from multipolygon to polygon to get labels on both chunks
-lapply(1:nrow(proposed_bham_districts), function(i) {
+proposed_bham_districts <- lapply(1:nrow(proposed_bham_districts), function(i) {
   st_cast(proposed_bham_districts[i, ], "POLYGON")
 }) %>%
-  do.call(rbind, .) |> 
+  do.call(rbind, .) 
+
+proposed_bham_districts|> 
   leaflet() |> 
   addTiles(options = tileOptions(opacity = 0.5)) |> 
   addPolygons(data = bham_ward25_boundaries,
@@ -115,7 +117,7 @@ leaflet() |>
                 color = highlight_colour,
                 bringToFront = TRUE))
 
-
+# see which wards are different between the two
 district_wards_best_fit |> 
   left_join(ward_district_locality_lookup,
             by = join_by("wd25nm" == "ward")) |> 
@@ -124,3 +126,81 @@ district_wards_best_fit |>
   mutate(agree = case_when(district_HWB == district_best_fit ~ "yes",
                            .default = "no")) |> 
   View()
+
+
+# Map to compare district models ------------------------------------------
+
+leaflet() |> 
+  addTiles(options = tileOptions(opacity = 0.5)) |> 
+  addPolygons(data = bham_ward25_boundaries,
+              color = "lightgrey",
+              weight = 1,
+              opacity = 1,
+              fillOpacity = 1,
+              fillColor = "white") |>
+  addPolygons(data = proposed_bham_districts,
+              color = border_colour,
+              weight = 1,
+              opacity = 1,
+              fillOpacity = 0,
+              fillColor = "white",
+              label = ~district,
+              labelOptions = labelOptions(noHide = TRUE, textOnly = TRUE, opacity = 1,
+                                          style = list("font-family" ="Arial", "font-weight" = "bold", "color" = ward_text_colour),
+                                          textsize = "8px",
+                                          direction = "center"),
+              highlightOptions = highlightOptions(
+                weight = 3,
+                color = highlight_colour,
+                bringToFront = TRUE),
+              group = "Model C: Ward-up, HWB-assigned") |> 
+  addPolygons(data = proposed_bham_districts_best_fit,
+              color = border_colour,
+              weight = 1,
+              opacity = 1,
+              fillOpacity = 0,
+              fillColor = "white",
+              label = ~district_name,
+              labelOptions = labelOptions(noHide = TRUE, textOnly = TRUE, opacity = 1,
+                                          style = list("font-family" ="Arial", "font-weight" = "bold", "color" = ward_text_colour),
+                                          textsize = "8px",
+                                          direction = "center"),
+              highlightOptions = highlightOptions(
+                weight = 3,
+                color = highlight_colour,
+                bringToFront = TRUE),
+              group = "Model D: Ward-up, best fit") |> 
+  addPolygons(data = bham_district22_boundaries,
+              color = border_colour,
+              weight = 1,
+              opacity = 1,
+              fillOpacity = 0,
+              fillColor = "white",
+              label = ~pcon22nm,
+              labelOptions = labelOptions(noHide = TRUE, textOnly = TRUE, opacity = 1,
+                                          style = list("font-family" ="Arial", "font-weight" = "bold", "color" = ward_text_colour),
+                                          textsize = "8px",
+                                          direction = "center"),
+              highlightOptions = highlightOptions(
+                weight = 3,
+                color = highlight_colour,
+                bringToFront = TRUE),
+              group = "Model A: Pre-2024 constituencies") |> 
+  addPolygons(data = bham_pcon24_boundaries,
+              color = border_colour,
+              weight = 1,
+              opacity = 1,
+              fillOpacity = 0,
+              fillColor = "white",
+              label = ~pcon24nm,
+              labelOptions = labelOptions(noHide = TRUE, textOnly = TRUE, opacity = 1,
+                                          style = list("font-family" ="Arial", "font-weight" = "bold", "color" = ward_text_colour),
+                                          textsize = "8px",
+                                          direction = "center"),
+              highlightOptions = highlightOptions(
+                weight = 3,
+                color = highlight_colour,
+                bringToFront = TRUE),
+              group = "Model B: Post-2024 constituencies") |> 
+  addLayersControl(
+    baseGroups = c("Model A: Pre-2024 constituencies", "Model B: Post-2024 constituencies", "Model C: Ward-up, HWB-assigned", "Model D: Ward-up, best fit"))
