@@ -137,6 +137,8 @@ proposed_bham_localities_best_fit <- proposed_bham_districts_best_fit |>
 
 # Map to compare district models ------------------------------------------
 
+ward_up_model_names <- c("Model A: Pre-2024 constituencies", "Model B: Post-2024 constituencies", "Model C: Ward-up, HWB-assigned", "Model D: Ward-up, best fit")
+
 leaflet() |> 
   addTiles(options = tileOptions(opacity = tile_opacity)) |> 
   addPolygons(data = bham_ward25_boundaries,
@@ -160,7 +162,7 @@ leaflet() |>
                 weight = 3,
                 color = highlight_colour,
                 bringToFront = TRUE),
-              group = "Model C: Ward-up, HWB-assigned") |> 
+              group = ward_up_model_names[3]) |> 
   addPolygons(data = proposed_bham_districts_best_fit,
               color = border_colour,
               weight = 1,
@@ -176,7 +178,7 @@ leaflet() |>
                 weight = 3,
                 color = highlight_colour,
                 bringToFront = TRUE),
-              group = "Model D: Ward-up, best fit") |> 
+              group = ward_up_model_names[4]) |> 
   addPolygons(data = bham_district22_boundaries,
               color = border_colour,
               weight = 1,
@@ -192,7 +194,7 @@ leaflet() |>
                 weight = 3,
                 color = highlight_colour,
                 bringToFront = TRUE),
-              group = "Model A: Pre-2024 constituencies") |> 
+              group = ward_up_model_names[1]) |> 
   addPolygons(data = bham_pcon24_boundaries,
               color = border_colour,
               weight = 1,
@@ -208,9 +210,9 @@ leaflet() |>
                 weight = 3,
                 color = highlight_colour,
                 bringToFront = TRUE),
-              group = "Model B: Post-2024 constituencies") |> 
+              group = ward_up_model_names[2]) |> 
   addLayersControl(
-    baseGroups = c("Model A: Pre-2024 constituencies", "Model B: Post-2024 constituencies", "Model C: Ward-up, HWB-assigned", "Model D: Ward-up, best fit"))
+    baseGroups = ward_up_model_names)
 
 
 # Map to compare locality models ------------------------------------------
@@ -248,7 +250,7 @@ leaflet() |>
                 weight = 3,
                 color = highlight_colour,
                 bringToFront = TRUE),
-              group = "Model C: Ward-up, HWB-assigned") |> 
+              group = ward_up_model_names[3]) |> 
   addPolygons(data = proposed_bham_localities_best_fit,
               color = border_colour,
               weight = 1,
@@ -264,7 +266,7 @@ leaflet() |>
                 weight = 3,
                 color = highlight_colour,
                 bringToFront = TRUE),
-              group = "Model D: Ward-up, best fit") |> 
+              group = ward_up_model_names[4]) |> 
   addPolygons(data = bham_locality_boundaries,
               color = border_colour,
               weight = 1,
@@ -280,7 +282,7 @@ leaflet() |>
                 weight = 3,
                 color = highlight_colour,
                 bringToFront = TRUE),
-              group = "Model A: Pre-2024 constituencies") |> 
+              group = ward_up_model_names[1]) |> 
   addPolygons(data = proposed_bham_localities_pcon24,
               color = border_colour,
               weight = 1,
@@ -296,6 +298,6 @@ leaflet() |>
                 weight = 3,
                 color = highlight_colour,
                 bringToFront = TRUE),
-              group = "Model B: Post-2024 constituencies") |> 
+              group = ward_up_model_names[2]) |> 
   addLayersControl(
-    baseGroups = c("Model A: Pre-2024 constituencies", "Model B: Post-2024 constituencies", "Model C: Ward-up, HWB-assigned", "Model D: Ward-up, best fit"))
+    baseGroups = ward_up_model_names)
