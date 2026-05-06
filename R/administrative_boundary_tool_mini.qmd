@@ -655,291 +655,6 @@ district_wards |>
 ```
 :::
 
-## Constituency-Ward Interaction Maps
-
-These maps visualise the interaction between wards and parliamentary constituencies in Birmingham. Some wards fit neatly inside a constituency boundary; others do not. Hovering over a ward will show you what proportion of that ward fits inside the constituency boundary.
-
-Use the tabs to move between constituencies. A table is provided in the final tab as a quick lookup between constituencies and wards - this can be filtered or sorted as needed.
-
-```{r pcon-map-setup}
-pcon_wards_full <- data.frame()
-pcon_wards <- data.frame()
-
-pcons <- bham_pcon24_boundaries$pcon24nm
-
-for (pcon in pcons) {
-  # clip wards inside pcon boundary
-  temp_pcon_wards <- bham_pcon24_boundaries |> 
-    filter(pcon24nm == pcon)|> 
-    st_intersection(bham_ward25_boundaries) |> 
-    mutate(pcon_name = pcon)
-  
-  # find out the area of each clipped ward
-  temp_pcon_wards$area <- st_area(temp_pcon_wards)
-  
-  # pull out unclipped wards for this pcon
-  temp_pcon_wards_full <- bham_ward25_boundaries |> 
-    filter(wd25cd %in% temp_pcon_wards$wd25cd) |> 
-    mutate(pcon_name = pcon)
-  
-  # find area of unclipped ward and add to clipped ward sf
-  temp_pcon_wards$full_area <- st_area(temp_pcon_wards_full)
-  
-  # calulate what % of each ward is inside the boundary
-  # then filter out wards with less than 1% area inside boundary
-  temp_pcon_wards <- temp_pcon_wards |> 
-    mutate(pct = area/full_area*100) |> 
-    filter(as.numeric(pct) > 1)
-  
-  # recalculate unclipped wards now wards with <1% are excluded
-  temp_pcon_wards_full <- bham_ward25_boundaries |> 
-    filter(wd25cd %in% temp_pcon_wards$wd25cd) |> 
-    mutate(pcon_name = pcon)
-  
-  # append temp dfs to main df
-  pcon_wards_full <- rbind(pcon_wards_full,
-                               temp_pcon_wards_full)
-  
-  pcon_wards <- rbind(pcon_wards,
-                          temp_pcon_wards)
-}
-
-# pcon lsoa maps
-pcon_lsoas <- data.frame()
-
-for (pcon in pcons) {
-  # clip wards inside pcon boundary
-  temp_pcon_lsoas <- bham_pcon24_boundaries |> 
-    filter(pcon24nm == pcon)|> 
-    st_intersection(bham_imd25) |> 
-    mutate(pcon_name = pcon)
-  
-  pcon_lsoas <- rbind(pcon_lsoas,
-                          temp_pcon_lsoas)
-}
-
-# filter to get gps which fall within each pcon boundary
-pcon_gp_points <- data.frame()
-
-for (pcon in pcons) {
-  temp_pcon_gp_list <- bham_pcon24_boundaries |> 
-    filter(pcon24nm == pcon) |> 
-    st_contains(bham_gp_points)
-  
-  temp_pcon_gp_list <- temp_pcon_gp_list[[1]]
-  
-  temp_pcon_gp_points <- bham_gp_points |> 
-    filter(row_number() %in% temp_pcon_gp_list) |> 
-    mutate(pcon_name = pcon)
-  
-  pcon_gp_points <- rbind(pcon_gp_points,
-                              temp_pcon_gp_points)
-}
-
-# function to create map
-make_pcon_ward_map <- function(pcon, zoom) {
-  # wrapped ward names for district map
-  label_wards25_wrap_pcon <- pcon_wards |> 
-    filter(pcon_name == pcon) |> 
-    pull(wd25nm) |> 
-    str_wrap(15)
-  label_wards25_wrap_pcon<- gsub("\n", "<br>", label_wards25_wrap_pcon) |> 
-    lapply(htmltools::HTML)
-  
-  # labels with % inside pcon for pcon map
-  label_wards25_pcon <- pcon_wards |> 
-    filter(pcon_name == pcon) |> 
-    mutate(label = paste0(wd25nm, "<br>",
-                          round(pct, 0), "% falls within ", pcon_name)) |> 
-    pull(label) |> 
-    lapply(htmltools::HTML)
-  
-  lat <- bham_pcon24_boundaries |> 
-    filter(pcon24nm == pcon) |> 
-    pull(lat)
-  
-  long <- bham_pcon24_boundaries |> 
-    filter(pcon24nm == pcon) |> 
-    pull(long)
-  
-  leaflet(width = "100%", height = "650px") |> 
-    addMapPane("pconPane", zIndex = 200) |>       # LA boundary layer
-    addMapPane("imdPane", zIndex = 300) |>       # IMD layer (bottom)
-    addMapPane("wardsTextPane", zIndex = 350) |>
-    addMapPane("wardsPane", zIndex = 400) |>     # Wards
-    addMapPane("markersPane", zIndex = 700) |>   # GP markers
-    addMapPane("clustersPane", zIndex = 2000) |>   # GP clusters (top)
-    addTiles(options = tileOptions(opacity = tile_opacity)) |> 
-    # display pcon of interest only
-    addPolygons(data = bham_pcon24_boundaries |> filter(pcon24nm == pcon),
-                color = border_colour,
-                weight = 4,
-                opacity = 1,
-                fillOpacity = 0.7,
-                fillColor = "white",
-                options = pathOptions(pane = "pconPane")) |>
-    # display IMD by LSOA for pcon of interest only
-    addPolygons(data = pcon_lsoas |> filter(pcon_name == pcon),
-                fillColor = ~imd25_pal(imd25_decile),
-                fillOpacity = 0.7,
-                color = ~imd25_pal(imd25_decile),
-                weight = 1,
-                opacity = 0.35,
-                stroke = T,
-                group = "IMD 2025",
-                options = pathOptions(pane = "imdPane")) |>
-    # full wards text only
-    addPolygons(data = pcon_wards_full |> filter(pcon_name == pcon),
-                color = border_colour,
-                weight = 0,
-                opacity = 0,
-                fillOpacity = 0,
-                fillColor = "white",
-                label = label_wards25_wrap_pcon,
-                labelOptions = labelOptions(noHide = T, textOnly = T, opacity = 1,
-                                            style = list("font-family" ="Arial", "font-weight" = "bold", "color" = ward_text_colour),
-                                            textsize = "8px",
-                                            direction = "center"),
-                options = pathOptions(pane = "wardsTextPane"),
-                group = "Full Wards") |>
-    # full wards
-    addPolygons(data = pcon_wards_full |> filter(pcon_name == pcon),
-                color = border_colour,
-                weight = 1,
-                opacity = 1,
-                fillOpacity = 0,
-                fillColor = "white",
-                #label = ~wd25nm,
-                highlightOptions = highlightOptions(
-                  weight = 3,
-                  color = highlight_colour,
-                  bringToFront = TRUE,
-                  sendToBack = F),
-                label = label_wards25_pcon,
-                options = pathOptions(pane = "wardsPane"),
-                group = "Full Wards") |>
-  #   addMarkers(data = pcon_gp_points |> filter(pcon_name == pcon),
-  #              label = ~surgery_name,
-  #              group = "GP Surgeries",
-  #              options = pathOptions(pane = "markersPane"),
-  #              clusterOptions = markerClusterOptions(
-  #                pane = "clustersPane",  # Keep clusters above labels
-  #                iconCreateFunction = JS("
-  #   function (cluster) {
-  #     var count = cluster.getChildCount();
-  #     
-  #     // Dynamic size based on count
-  #     var size = count < 10 ? 40 : (count < 20 ? 50 : 60);
-  #     var innerSize = size * 0.7; // Inner circle smaller
-  #     
-  #     var color = '#D00070'; // Fixed color for all clusters
-  #     
-  #     return new L.DivIcon({
-  #       html: '<div style=\"position:relative; width:' + size + 'px; height:' + size + 'px;\">' +
-  #               '<div style=\"background-color:' + color + '; opacity:0.4; border-radius:50%; width:' + size + 'px; height:' + size + 'px; position:absolute; top:0; left:0;\"></div>' +
-  #               '<div style=\"background-color:' + color + '; color:white; border-radius:50%; width:' + innerSize + 'px; height:' + innerSize + 'px; position:absolute; top:' + ((size - innerSize)/2) + 'px; left:' + ((size - innerSize)/2) + 'px; display:flex; align-items:center; justify-content:center; font-weight:bold;\">' + count + '</div>' +
-  #             '</div>',
-  #       className: 'marker-cluster',
-  #       iconSize: [size, size],
-  #       pane: 'clustersPane'
-  #     });
-  #   }
-  # ")
-  #              )) |>
-    addLegend(data = pcon_lsoas,
-              "bottomright", 
-              pal = imd25_pal, 
-              values = ~imd25_decile,
-              title = "IMD 2025 Decile",
-              labFormat = labelFormat(prefix = "Decile "),
-              opacity = 0.5) |> 
-    setView(lat = lat, lng = long, zoom = zoom) |> 
-    addLayersControl(
-      overlayGroups = c("IMD 2025"))
-  
-}
-```
-
-::: panel-tabset
-## Edgbaston
-
-```{r edgbaston-pcon-ward-map}
-make_pcon_ward_map("Edgbaston", 13)
-```
-
-## Erdington
-
-```{r erdington-pcon-ward-map}
-make_pcon_ward_map("Erdington", 13)
-```
-
-## Hall Green & Moseley
-
-```{r hall-green-pcon-ward-map}
-make_pcon_ward_map("Hall Green and Moseley", 13)
-```
-
-## Hodge Hill & Solihull North
-
-```{r hodge-hill-pcon-ward-map}
-make_pcon_ward_map("Hodge Hill and Solihull North", 13)
-```
-
-## Ladywood
-
-```{r ladywood-pcon-ward-map}
-make_pcon_ward_map("Ladywood", 13)
-```
-
-## Northfield
-
-```{r Northfield-pcon-ward-map}
-make_pcon_ward_map("Northfield", 13)
-```
-
-## Perry Barr
-
-```{r perry-barr-pcon-ward-map}
-make_pcon_ward_map("Perry Barr", 13)
-```
-
-## Selly Oak
-
-```{r selly-oak-pcon-ward-map}
-make_pcon_ward_map("Selly Oak", 13)
-```
-
-## Sutton Coldfield
-
-```{r sutton-pcon-ward-map}
-make_pcon_ward_map("Sutton Coldfield", 12)
-```
-
-## Yardley
-
-```{r Yardley-pcon-ward-map}
-make_pcon_ward_map("Yardley", 13)
-```
-
-## Table
-
-```{r pcon-ward-table}
-pcon_wards |> 
-  as_tibble() |> 
-  select(wd25nm, pcon_name, pct) |> 
-  arrange(wd25nm) |> 
-  mutate(pct = round(pct, 0),
-         pct = paste0(pct, "%")) |> 
-  rename(`Ward name` = wd25nm,
-         `Constituency name` = pcon_name,
-         `% of ward in constituency` = pct) |> 
-  datatable(rownames = F,
-            filter = "top",
-            options = list(pageLength = 15,
-                           autoWidth = TRUE))
-```
-:::
-
 ## Locality-Ward Interaction Maps
 
 These maps visualise the interaction between wards and localities in Birmingham. Some wards fit neatly inside a locality boundary; others do not. Hovering over a ward will show you what proportion of that ward fits inside the locality boundary.
@@ -1189,149 +904,282 @@ locality_wards |>
 ```
 :::
 
-## Locality-PCN Interaction Maps
+## Constituency-Ward Interaction Maps
 
-These maps visualise the interaction between primary care networks (PCNs) and their assigned localities in Birmingham. Individual GP practices are shown and coloured according to their PCN. Some practices fall inside their PCN's assigned locality; others do not. Hovering over a point will show you the GP practice name, PCN and type (main/branch).
+These maps visualise the interaction between wards and parliamentary constituencies in Birmingham. Some wards fit neatly inside a constituency boundary; others do not. Hovering over a ward will show you what proportion of that ward fits inside the constituency boundary.
 
-Use the tabs to move between localities. The table in the final tab provides a summary of how many practices fall outside of their assigned locality, by locality and PCN - this can be filtered or sorted as needed.
+Use the tabs to move between constituencies. A table is provided in the final tab as a quick lookup between constituencies and wards - this can be filtered or sorted as needed.
 
-```{r locality-pcn-map-setup}
-make_locality_pcn_map <- function(loc){
-  locality_data <- bham_pcns |>
-    filter(locality_name == loc)
+```{r pcon-map-setup}
+pcon_wards_full <- data.frame()
+pcon_wards <- data.frame()
+
+pcons <- bham_pcon24_boundaries$pcon24nm
+
+for (pcon in pcons) {
+  # clip wards inside pcon boundary
+  temp_pcon_wards <- bham_pcon24_boundaries |> 
+    filter(pcon24nm == pcon)|> 
+    st_intersection(bham_ward25_boundaries) |> 
+    mutate(pcon_name = pcon)
   
-  label_pcn_GPs <- paste0(locality_data$prac_name, "<br>",
-                          locality_data$pcn, "<br>",
-                          locality_data$type)|> 
+  # find out the area of each clipped ward
+  temp_pcon_wards$area <- st_area(temp_pcon_wards)
+  
+  # pull out unclipped wards for this pcon
+  temp_pcon_wards_full <- bham_ward25_boundaries |> 
+    filter(wd25cd %in% temp_pcon_wards$wd25cd) |> 
+    mutate(pcon_name = pcon)
+  
+  # find area of unclipped ward and add to clipped ward sf
+  temp_pcon_wards$full_area <- st_area(temp_pcon_wards_full)
+  
+  # calulate what % of each ward is inside the boundary
+  # then filter out wards with less than 1% area inside boundary
+  temp_pcon_wards <- temp_pcon_wards |> 
+    mutate(pct = area/full_area*100) |> 
+    filter(as.numeric(pct) > 1)
+  
+  # recalculate unclipped wards now wards with <1% are excluded
+  temp_pcon_wards_full <- bham_ward25_boundaries |> 
+    filter(wd25cd %in% temp_pcon_wards$wd25cd) |> 
+    mutate(pcon_name = pcon)
+  
+  # append temp dfs to main df
+  pcon_wards_full <- rbind(pcon_wards_full,
+                               temp_pcon_wards_full)
+  
+  pcon_wards <- rbind(pcon_wards,
+                          temp_pcon_wards)
+}
+
+# pcon lsoa maps
+pcon_lsoas <- data.frame()
+
+for (pcon in pcons) {
+  # clip wards inside pcon boundary
+  temp_pcon_lsoas <- bham_pcon24_boundaries |> 
+    filter(pcon24nm == pcon)|> 
+    st_intersection(bham_imd25) |> 
+    mutate(pcon_name = pcon)
+  
+  pcon_lsoas <- rbind(pcon_lsoas,
+                          temp_pcon_lsoas)
+}
+
+# function to create map
+make_pcon_ward_map <- function(pcon, zoom) {
+  # wrapped ward names for district map
+  label_wards25_wrap_pcon <- pcon_wards |> 
+    filter(pcon_name == pcon) |> 
+    pull(wd25nm) |> 
+    str_wrap(15)
+  label_wards25_wrap_pcon<- gsub("\n", "<br>", label_wards25_wrap_pcon) |> 
     lapply(htmltools::HTML)
   
-  pal <- colorFactor(
-    palette = "Dark2",   # or another palette name
-    domain = locality_data$pcn
-  )
+  # labels with % inside pcon for pcon map
+  label_wards25_pcon <- pcon_wards |> 
+    filter(pcon_name == pcon) |> 
+    mutate(label = paste0(wd25nm, "<br>",
+                          round(pct, 0), "% falls within ", pcon_name)) |> 
+    pull(label) |> 
+    lapply(htmltools::HTML)
   
-  leaflet(locality_data,
-          width = "100%", height = "650px") |> 
-    addTiles(options = tileOptions(opacity = tile_opacity)) |>
-    addPolygons(data = bham_locality_boundaries |> filter(locality == loc),
+  lat <- bham_pcon24_boundaries |> 
+    filter(pcon24nm == pcon) |> 
+    pull(lat)
+  
+  long <- bham_pcon24_boundaries |> 
+    filter(pcon24nm == pcon) |> 
+    pull(long)
+  
+  leaflet(width = "100%", height = "650px") |> 
+    addMapPane("pconPane", zIndex = 200) |>       # LA boundary layer
+    addMapPane("imdPane", zIndex = 300) |>       # IMD layer (bottom)
+    addMapPane("wardsTextPane", zIndex = 350) |>
+    addMapPane("wardsPane", zIndex = 400) |>     # Wards
+    addMapPane("markersPane", zIndex = 700) |>   # GP markers
+    addMapPane("clustersPane", zIndex = 2000) |>   # GP clusters (top)
+    addTiles(options = tileOptions(opacity = tile_opacity)) |> 
+    # display pcon of interest only
+    addPolygons(data = bham_pcon24_boundaries |> filter(pcon24nm == pcon),
                 color = border_colour,
                 weight = 4,
                 opacity = 1,
-                fillOpacity = 0.6,
-                fillColor = "white") |>
-    addCircleMarkers(color = ~pal(pcn),
-                     fillColor = ~pal(pcn),
-                     fillOpacity = 1,
-                     radius = 8,
-                     stroke = FALSE,
-                     label = label_pcn_GPs) |> 
-    addLegend(
-      "bottomright",
-      pal = pal,
-      values = ~pcn,
-      title = "PCN"
-    )
+                fillOpacity = 0.7,
+                fillColor = "white",
+                options = pathOptions(pane = "pconPane")) |>
+    # display IMD by LSOA for pcon of interest only
+    addPolygons(data = pcon_lsoas |> filter(pcon_name == pcon),
+                fillColor = ~imd25_pal(imd25_decile),
+                fillOpacity = 0.7,
+                color = ~imd25_pal(imd25_decile),
+                weight = 1,
+                opacity = 0.35,
+                stroke = T,
+                group = "IMD 2025",
+                options = pathOptions(pane = "imdPane")) |>
+    # full wards text only
+    addPolygons(data = pcon_wards_full |> filter(pcon_name == pcon),
+                color = border_colour,
+                weight = 0,
+                opacity = 0,
+                fillOpacity = 0,
+                fillColor = "white",
+                label = label_wards25_wrap_pcon,
+                labelOptions = labelOptions(noHide = T, textOnly = T, opacity = 1,
+                                            style = list("font-family" ="Arial", "font-weight" = "bold", "color" = ward_text_colour),
+                                            textsize = "8px",
+                                            direction = "center"),
+                options = pathOptions(pane = "wardsTextPane"),
+                group = "Full Wards") |>
+    # full wards
+    addPolygons(data = pcon_wards_full |> filter(pcon_name == pcon),
+                color = border_colour,
+                weight = 1,
+                opacity = 1,
+                fillOpacity = 0,
+                fillColor = "white",
+                #label = ~wd25nm,
+                highlightOptions = highlightOptions(
+                  weight = 3,
+                  color = highlight_colour,
+                  bringToFront = TRUE,
+                  sendToBack = F),
+                label = label_wards25_pcon,
+                options = pathOptions(pane = "wardsPane"),
+                group = "Full Wards") |>
+  #   addMarkers(data = pcon_gp_points |> filter(pcon_name == pcon),
+  #              label = ~surgery_name,
+  #              group = "GP Surgeries",
+  #              options = pathOptions(pane = "markersPane"),
+  #              clusterOptions = markerClusterOptions(
+  #                pane = "clustersPane",  # Keep clusters above labels
+  #                iconCreateFunction = JS("
+  #   function (cluster) {
+  #     var count = cluster.getChildCount();
+  #     
+  #     // Dynamic size based on count
+  #     var size = count < 10 ? 40 : (count < 20 ? 50 : 60);
+  #     var innerSize = size * 0.7; // Inner circle smaller
+  #     
+  #     var color = '#D00070'; // Fixed color for all clusters
+  #     
+  #     return new L.DivIcon({
+  #       html: '<div style=\"position:relative; width:' + size + 'px; height:' + size + 'px;\">' +
+  #               '<div style=\"background-color:' + color + '; opacity:0.4; border-radius:50%; width:' + size + 'px; height:' + size + 'px; position:absolute; top:0; left:0;\"></div>' +
+  #               '<div style=\"background-color:' + color + '; color:white; border-radius:50%; width:' + innerSize + 'px; height:' + innerSize + 'px; position:absolute; top:' + ((size - innerSize)/2) + 'px; left:' + ((size - innerSize)/2) + 'px; display:flex; align-items:center; justify-content:center; font-weight:bold;\">' + count + '</div>' +
+  #             '</div>',
+  #       className: 'marker-cluster',
+  #       iconSize: [size, size],
+  #       pane: 'clustersPane'
+  #     });
+  #   }
+  # ")
+  #              )) |>
+    addLegend(data = pcon_lsoas,
+              "bottomright", 
+              pal = imd25_pal, 
+              values = ~imd25_decile,
+              title = "IMD 2025 Decile",
+              labFormat = labelFormat(prefix = "Decile "),
+              opacity = 0.5) |> 
+    setView(lat = lat, lng = long, zoom = zoom) |> 
+    addLayersControl(
+      overlayGroups = c("IMD 2025"))
+  
 }
 ```
 
 ::: panel-tabset
-## North
+## Edgbaston
 
-```{r north-pcn-map}
-make_locality_pcn_map("North")
+```{r edgbaston-pcon-ward-map}
+make_pcon_ward_map("Edgbaston", 13)
 ```
 
-## East
+## Erdington
 
-```{r East-pcn-map}
-make_locality_pcn_map("East")
+```{r erdington-pcon-ward-map}
+make_pcon_ward_map("Erdington", 13)
 ```
 
-## South
+## Hall Green & Moseley
 
-```{r South-pcn-map}
-make_locality_pcn_map("South")
+```{r hall-green-pcon-ward-map}
+make_pcon_ward_map("Hall Green and Moseley", 13)
 ```
 
-## West
+## Hodge Hill & Solihull North
 
-```{r West-pcn-map}
-make_locality_pcn_map("West")
+```{r hodge-hill-pcon-ward-map}
+make_pcon_ward_map("Hodge Hill and Solihull North", 13)
 ```
 
-## Central
+## Ladywood
 
-```{r Central-pcn-map}
-make_locality_pcn_map("Central")
+```{r ladywood-pcon-ward-map}
+make_pcon_ward_map("Ladywood", 13)
+```
+
+## Northfield
+
+```{r Northfield-pcon-ward-map}
+make_pcon_ward_map("Northfield", 13)
+```
+
+## Perry Barr
+
+```{r perry-barr-pcon-ward-map}
+make_pcon_ward_map("Perry Barr", 13)
+```
+
+## Selly Oak
+
+```{r selly-oak-pcon-ward-map}
+make_pcon_ward_map("Selly Oak", 13)
+```
+
+## Sutton Coldfield
+
+```{r sutton-pcon-ward-map}
+make_pcon_ward_map("Sutton Coldfield", 12)
+```
+
+## Yardley
+
+```{r Yardley-pcon-ward-map}
+make_pcon_ward_map("Yardley", 13)
 ```
 
 ## Table
 
-```{r locality-pcn-table}
-locality_pcn_table <- data.frame()
-
-for (loc in localities){
-  temp_locality_pcns <- bham_pcns |>
-    filter(locality_name == loc)
-  
-  temp_locality_pcn_matrix <- bham_locality_boundaries |>
-    filter(locality == loc) |> 
-    st_contains(temp_locality_pcns,
-                sparse = F)
-  
-  row.names(temp_locality_pcn_matrix) <- loc
-  
-  colnames(temp_locality_pcn_matrix) <- temp_locality_pcns$prac_name
-  
-  temp_locality_pcn_matrix <- temp_locality_pcn_matrix |> 
-    as_tibble(rownames = "locality_name") |> 
-    pivot_longer(cols = !locality_name,
-                 names_to = "prac_name",
-                 values_to = "in_locality")
-  
-  locality_pcn_table <- rbind(locality_pcn_table,
-                              temp_locality_pcn_matrix)
-}
-
-# locality_pcn_table |> 
-#   left_join(bham_pcns,
-#             by = c("locality_name", "prac_name")) |> 
-#   select(locality_name, pcn, prac_name, in_locality) |> 
-#   rename(`Locality` = locality_name,
-#          PCN = pcn,
-#          `Practice Name` = prac_name,
-#          `Falls inside assigned locality` = in_locality) |> 
-#   datatable(rownames = F,
-#             filter = "top",
-#             options = list(pageLength = 15,
-#                            autoWidth = TRUE))
-
-
-locality_pcn_table |> 
-  left_join(bham_pcns,
-            by = c("locality_name", "prac_name")) |> 
-  select(locality_name, pcn, prac_name, in_locality) |> 
-  group_by(locality_name, pcn, in_locality) |> 
-  count() |> 
-  #ungroup() |> 
-  group_by(locality_name, pcn) |> 
-  mutate(d = sum(n)) |> 
-  filter(in_locality == F) |> 
-  mutate(pct = n/d*100,
-         label = paste0(round(pct, 1), "% (", n, " out of ", d, " practices)")) |> 
-  select(locality_name, pcn, label) |> 
-  rename(`Locality` = locality_name,
-         PCN = pcn,
-         `Practices falling outside assigned locality` = label) |> 
+```{r pcon-ward-table}
+pcon_wards |> 
+  as_tibble() |> 
+  select(wd25nm, pcon_name, pct) |> 
+  arrange(wd25nm) |> 
+  mutate(pct = round(pct, 0),
+         pct = paste0(pct, "%")) |> 
+  rename(`Ward name` = wd25nm,
+         `Constituency name` = pcon_name,
+         `% of ward in constituency` = pct) |> 
   datatable(rownames = F,
             filter = "top",
             options = list(pageLength = 15,
                            autoWidth = TRUE))
-
 ```
 :::
 
 # Potential District Models
+
+This section demonstrates the potential ways a district/locality model could be achieved.
+
+- **Model A:** the existing model. Districts are based on pre-2024 constituency boundaries. Wards and districts are not always coterminous.
+- **Model B:** a constituency-based model. Districts are based on post-2024 constituency boundaries. Wards and districts are not always coterminous.
+- **Model C:** a ward-up model using the Health and Wellbeing Board proposal (29/1/26). Wards and districts are always coterminous but Selly Oak is not contiguous.
+- **Model D:** a ward-up model using best fit alignment with existing district boundaries (pre-2024 constituencies). Wards are assigned to the district they share the largest footprint with. Wards and districts are always coterminous.
+
 
 ```{r ward_up_models}
 
@@ -1400,9 +1248,10 @@ proposed_bham_localities_pcon24 <- bham_pcon24_boundaries |>
 ward_up_model_names <- c("Model A: Pre-2024 constituencies", "Model B: Post-2024 constituencies", "Model C: Ward-up, HWB-assigned", "Model D: Ward-up, best fit")
 ```
 
-
 ## Districts
 
+::: panel-tabset
+## Map
 ```{r ward_up_models_district_map}
 leaflet(width = "100%", height = "650px") |> 
   addTiles(options = tileOptions(opacity = tile_opacity)) |> 
@@ -1480,8 +1329,75 @@ leaflet(width = "100%", height = "650px") |>
     baseGroups = ward_up_model_names)
 ```
 
-## Localities
+## Model A
+```{r district-model-a-table}
+district_wards |> 
+  as_tibble() |> 
+  select(wd25nm, pcon22nm, pct) |> 
+  arrange(pcon22nm) |> 
+  mutate(pct = round(pct, 0),
+         pct = paste0(pct, "%")) |> 
+  rename(`Ward name` = wd25nm,
+         `District name` = pcon22nm,
+         `% of ward in district` = pct) |> 
+  datatable(rownames = F,
+            filter = "top",
+            options = list(pageLength = 15,
+                           autoWidth = TRUE))
+```
 
+## Model B
+```{r district-model-b-table}
+pcon_wards |> 
+  as_tibble() |> 
+  select(wd25nm, pcon_name, pct) |> 
+  arrange(pcon_name) |> 
+  mutate(pct = round(pct, 0),
+         pct = paste0(pct, "%")) |> 
+  rename(`Ward name` = wd25nm,
+         `District name` = pcon_name,
+         `% of ward in district` = pct) |> 
+  datatable(rownames = F,
+            filter = "top",
+            options = list(pageLength = 15,
+                           autoWidth = TRUE))
+```
+
+## Model C
+```{r district-model-c-table}
+ward_district_locality_lookup |> 
+  select(ward, district) |> 
+  arrange(district) |> 
+  mutate(pct = "100%") |> 
+  rename(`Ward name` = ward,
+         `District name` = district,
+         `% of ward in district` = pct) |> 
+  datatable(rownames = F,
+            filter = "top",
+            options = list(pageLength = 15,
+                           autoWidth = TRUE))
+```
+
+## Model D
+```{r district-model-d-table}
+district_wards_best_fit |> 
+  select(wd25nm, district_name) |> 
+  arrange(district_name) |> 
+  mutate(pct = "100%") |> 
+  rename(`Ward name` = wd25nm,
+         `District name` = district_name,
+         `% of ward in district` = pct) |> 
+  datatable(rownames = F,
+            filter = "top",
+            options = list(pageLength = 15,
+                           autoWidth = TRUE))
+```
+:::
+
+## Localities
+::: panel-tabset
+
+## Map
 ```{r ward_up_models_locality_map}
 leaflet(width = "100%", height = "650px") |> 
   addTiles(options = tileOptions(opacity = tile_opacity)) |> 
@@ -1558,3 +1474,43 @@ leaflet(width = "100%", height = "650px") |>
   addLayersControl(
     baseGroups = ward_up_model_names)
 ```
+
+## Model A
+```{r locality-model-a-table}
+locality_wards |> 
+  as_tibble() |> 
+  select(wd25nm, locality, pct) |> 
+  arrange(locality) |> 
+  mutate(pct = round(pct, 0),
+         pct = paste0(pct, "%")) |> 
+  rename(`Ward name` = wd25nm,
+         `Locality name` = locality,
+         `% of ward in locality` = pct) |> 
+  datatable(rownames = F,
+            filter = "top",
+            options = list(pageLength = 15,
+                           autoWidth = TRUE))
+```
+
+## Model B
+```{r locality-model-b-table}
+pcon_wards |> 
+  as_tibble() |> 
+  select(wd25nm, pcon24nm, pct) |> 
+  left_join(ward_district_locality_lookup |> select(district, locality) |> distinct(district, .keep_all = T),
+            by = join_by("pcon24nm" == "district")) |> 
+  mutate(locality = case_when(pcon24nm == "Hall Green and Moseley" ~ "Central",
+                              pcon24nm == "Hodge Hill and Solihull North" ~ "East",
+                              .default = locality))
+  arrange(locality) |> 
+  mutate(pct = round(pct, 0),
+         pct = paste0(pct, "%")) |> 
+  rename(`Ward name` = wd25nm,
+         `Locality name` = locality,
+         `% of ward in locality` = pct) |> 
+  datatable(rownames = F,
+            filter = "top",
+            options = list(pageLength = 15,
+                           autoWidth = TRUE))
+```
+:::
