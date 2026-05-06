@@ -22,7 +22,7 @@ proposed_bham_districts <- bham_ward25_boundaries |>
 
 # show districts on map
 # first convert Selly Oak from multipolygon to polygon to get labels on both chunks
-proposed_bham_districts <- lapply(1:nrow(proposed_bham_districts), function(i) {
+proposed_bham_districts_text <- lapply(1:nrow(proposed_bham_districts), function(i) {
   st_cast(proposed_bham_districts[i, ], "POLYGON")
 }) %>%
   do.call(rbind, .) 
@@ -147,10 +147,11 @@ leaflet() |>
               opacity = 1,
               fillOpacity = 1,
               fillColor = "white") |>
-  addPolygons(data = proposed_bham_districts,
+  # text only
+  addPolygons(data = proposed_bham_districts_text,
               color = border_colour,
-              weight = 1,
-              opacity = 1,
+              weight = 0,
+              opacity = 0,
               fillOpacity = 0,
               fillColor = "white",
               label = ~district,
@@ -158,15 +159,26 @@ leaflet() |>
                                           style = list("font-family" ="Arial", "font-weight" = "bold", "color" = ward_text_colour),
                                           textsize = "8px",
                                           direction = "center"),
-              highlightOptions = highlightOptions(
-                weight = 3,
-                color = highlight_colour,
-                bringToFront = TRUE),
-              group = ward_up_model_names[3]) |> 
-  addPolygons(data = proposed_bham_districts_best_fit,
+              group = ward_up_model_names[3]) |>
+  # boundaries
+  addPolygons(data = proposed_bham_districts,
               color = border_colour,
               weight = 1,
               opacity = 1,
+              fillOpacity = 0,
+              fillColor = "white",
+              label = ~district,
+              highlightOptions = highlightOptions(
+                weight = 3,
+                color = highlight_colour,
+                bringToFront = TRUE,
+                sendToBack = F),
+              group = ward_up_model_names[3]) |> 
+  # text only
+  addPolygons(data = proposed_bham_districts_best_fit,
+              color = border_colour,
+              weight = 0,
+              opacity = 0,
               fillOpacity = 0,
               fillColor = "white",
               label = ~district_name,
@@ -174,11 +186,21 @@ leaflet() |>
                                           style = list("font-family" ="Arial", "font-weight" = "bold", "color" = ward_text_colour),
                                           textsize = "8px",
                                           direction = "center"),
+              group = ward_up_model_names[4]) |>
+  # boundaries
+  addPolygons(data = proposed_bham_districts_best_fit,
+              color = border_colour,
+              weight = 1,
+              opacity = 1,
+              fillOpacity = 0,
+              fillColor = "white",
+              label = ~district_name,
               highlightOptions = highlightOptions(
                 weight = 3,
                 color = highlight_colour,
                 bringToFront = TRUE),
               group = ward_up_model_names[4]) |> 
+  # text only
   addPolygons(data = bham_district22_boundaries,
               color = border_colour,
               weight = 1,
@@ -190,11 +212,21 @@ leaflet() |>
                                           style = list("font-family" ="Arial", "font-weight" = "bold", "color" = ward_text_colour),
                                           textsize = "8px",
                                           direction = "center"),
+              group = ward_up_model_names[1]) |>
+  # boundaries
+  addPolygons(data = bham_district22_boundaries,
+              color = border_colour,
+              weight = 1,
+              opacity = 1,
+              fillOpacity = 0,
+              fillColor = "white",
+              label = ~pcon22nm,
               highlightOptions = highlightOptions(
                 weight = 3,
                 color = highlight_colour,
                 bringToFront = TRUE),
               group = ward_up_model_names[1]) |> 
+  # text only
   addPolygons(data = bham_pcon24_boundaries,
               color = border_colour,
               weight = 1,
@@ -206,6 +238,15 @@ leaflet() |>
                                           style = list("font-family" ="Arial", "font-weight" = "bold", "color" = ward_text_colour),
                                           textsize = "8px",
                                           direction = "center"),
+              group = ward_up_model_names[2]) |>
+  # boundaries
+  addPolygons(data = bham_pcon24_boundaries,
+              color = border_colour,
+              weight = 1,
+              opacity = 1,
+              fillOpacity = 0,
+              fillColor = "white",
+              label = ~pcon24nm,
               highlightOptions = highlightOptions(
                 weight = 3,
                 color = highlight_colour,
