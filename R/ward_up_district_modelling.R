@@ -203,8 +203,8 @@ leaflet() |>
   # text only
   addPolygons(data = bham_district22_boundaries,
               color = border_colour,
-              weight = 1,
-              opacity = 1,
+              weight = 0,
+              opacity = 0,
               fillOpacity = 0,
               fillColor = "white",
               label = ~pcon22nm,
@@ -229,8 +229,8 @@ leaflet() |>
   # text only
   addPolygons(data = bham_pcon24_boundaries,
               color = border_colour,
-              weight = 1,
-              opacity = 1,
+              weight = 0,
+              opacity = 0,
               fillOpacity = 0,
               fillColor = "white",
               label = ~pcon24nm,
@@ -276,6 +276,20 @@ leaflet() |>
               opacity = 1,
               fillOpacity = 1,
               fillColor = "white") |>
+  # text only
+  addPolygons(data = proposed_bham_localities,
+              color = border_colour,
+              weight = 0,
+              opacity = 0,
+              fillOpacity = 0,
+              fillColor = "white",
+              label = ~locality,
+              labelOptions = labelOptions(noHide = TRUE, textOnly = TRUE, opacity = 1,
+                                          style = list("font-family" ="Arial", "font-weight" = "bold", "color" = ward_text_colour),
+                                          textsize = "8px",
+                                          direction = "center"),
+              group = ward_up_model_names[3]) |>
+  # boundaries
   addPolygons(data = proposed_bham_localities,
               color = border_colour,
               weight = 1,
@@ -283,15 +297,25 @@ leaflet() |>
               fillOpacity = 0,
               fillColor = "white",
               label = ~locality,
-              labelOptions = labelOptions(noHide = TRUE, textOnly = TRUE, opacity = 1,
-                                          style = list("font-family" ="Arial", "font-weight" = "bold", "color" = ward_text_colour),
-                                          textsize = "8px",
-                                          direction = "center"),
               highlightOptions = highlightOptions(
                 weight = 3,
                 color = highlight_colour,
                 bringToFront = TRUE),
               group = ward_up_model_names[3]) |> 
+  # text only
+  addPolygons(data = proposed_bham_localities_best_fit,
+              color = border_colour,
+              weight = 0,
+              opacity = 0,
+              fillOpacity = 0,
+              fillColor = "white",
+              label = ~locality,
+              labelOptions = labelOptions(noHide = TRUE, textOnly = TRUE, opacity = 1,
+                                          style = list("font-family" ="Arial", "font-weight" = "bold", "color" = ward_text_colour),
+                                          textsize = "8px",
+                                          direction = "center"),
+              group = ward_up_model_names[4]) |>
+  # boundaries
   addPolygons(data = proposed_bham_localities_best_fit,
               color = border_colour,
               weight = 1,
@@ -299,15 +323,25 @@ leaflet() |>
               fillOpacity = 0,
               fillColor = "white",
               label = ~locality,
-              labelOptions = labelOptions(noHide = TRUE, textOnly = TRUE, opacity = 1,
-                                          style = list("font-family" ="Arial", "font-weight" = "bold", "color" = ward_text_colour),
-                                          textsize = "8px",
-                                          direction = "center"),
               highlightOptions = highlightOptions(
                 weight = 3,
                 color = highlight_colour,
                 bringToFront = TRUE),
               group = ward_up_model_names[4]) |> 
+  # text only
+  addPolygons(data = bham_locality_boundaries,
+              color = border_colour,
+              weight = 0,
+              opacity = 0,
+              fillOpacity = 0,
+              fillColor = "white",
+              label = ~locality,
+              labelOptions = labelOptions(noHide = TRUE, textOnly = TRUE, opacity = 1,
+                                          style = list("font-family" ="Arial", "font-weight" = "bold", "color" = ward_text_colour),
+                                          textsize = "8px",
+                                          direction = "center"),
+              group = ward_up_model_names[1]) |> 
+  # boundaries
   addPolygons(data = bham_locality_boundaries,
               color = border_colour,
               weight = 1,
@@ -315,19 +349,16 @@ leaflet() |>
               fillOpacity = 0,
               fillColor = "white",
               label = ~locality,
-              labelOptions = labelOptions(noHide = TRUE, textOnly = TRUE, opacity = 1,
-                                          style = list("font-family" ="Arial", "font-weight" = "bold", "color" = ward_text_colour),
-                                          textsize = "8px",
-                                          direction = "center"),
               highlightOptions = highlightOptions(
                 weight = 3,
                 color = highlight_colour,
                 bringToFront = TRUE),
-              group = ward_up_model_names[1]) |> 
+              group = ward_up_model_names[1]) |>
+  # text only
   addPolygons(data = proposed_bham_localities_pcon24,
               color = border_colour,
-              weight = 1,
-              opacity = 1,
+              weight = 0,
+              opacity = 0,
               fillOpacity = 0,
               fillColor = "white",
               label = ~locality,
@@ -335,6 +366,15 @@ leaflet() |>
                                           style = list("font-family" ="Arial", "font-weight" = "bold", "color" = ward_text_colour),
                                           textsize = "8px",
                                           direction = "center"),
+              group = ward_up_model_names[2]) |>
+  # boundaries
+  addPolygons(data = proposed_bham_localities_pcon24,
+              color = border_colour,
+              weight = 1,
+              opacity = 1,
+              fillOpacity = 0,
+              fillColor = "white",
+              label = ~locality,
               highlightOptions = highlightOptions(
                 weight = 3,
                 color = highlight_colour,
