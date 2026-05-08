@@ -1202,7 +1202,7 @@ proposed_bham_districts <- bham_ward25_boundaries |>
   summarise() 
 
 # convert Selly Oak from multipolygon to polygon to get labels on both chunks
-proposed_bham_districts <- lapply(1:nrow(proposed_bham_districts), function(i) {
+proposed_bham_districts_text <- lapply(1:nrow(proposed_bham_districts), function(i) {
   st_cast(proposed_bham_districts[i, ], "POLYGON")
 }) %>%
   do.call(rbind, .) 
@@ -1253,6 +1253,10 @@ ward_up_model_names <- c("Model A: Pre-2024 constituencies", "Model B: Post-2024
 ```
 
 ## Districts
+
+The map tab shows the four potential district models described above. Use the menu in the top right to move between models. Ward boundaries are shown in light grey.
+
+The other tabs provide a lookup between wards and districts for each model.
 
 ::: panel-tabset
 ## Map
@@ -1440,6 +1444,11 @@ district_wards_best_fit |>
 :::
 
 ## Localities
+
+The map tab shows the four potential locality models, based on the district models described above. Two districts make up each locality. Use the menu in the top right to move between models. Ward boundaries are shown in light grey.
+
+The other tabs provide a lookup between wards and localities for each model.
+
 ::: panel-tabset
 
 ## Map
@@ -1579,20 +1588,93 @@ locality_wards |>
 
 ## Model B
 ```{r locality-model-b-table}
-pcon_wards |> 
+
+# calculate % of wards in each proposed locality
+locality_pcon24_wards_full <- data.frame()
+locality_pcon24_wards <- data.frame()
+
+sf_use_s2(FALSE)
+
+localities <- proposed_bham_localities_pcon24$locality
+
+for (loc in localities) {
+  # clip wards inside district boundary
+  temp_locality_pcon24_wards <- proposed_bham_localities_pcon24 |> 
+    filter(locality == loc)|> 
+    st_intersection(bham_ward25_boundaries) |> 
+    mutate(locality = loc)
+  
+  # find out the area of each clipped ward
+  temp_locality_pcon24_wards$area <- st_area(temp_locality_pcon24_wards)
+  
+  # pull out unclipped wards for this locality
+  temp_locality_pcon24_wards_full <- bham_ward25_boundaries |> 
+    filter(wd25cd %in% temp_locality_pcon24_wards$wd25cd) |> 
+    mutate(locality = loc)
+  
+  # find area of unclipped ward and add to clipped ward sf
+  temp_locality_pcon24_wards$full_area <- st_area(temp_locality_pcon24_wards_full)
+  
+  # calulate what % of each ward is inside the boundary
+  # then filter out wards with less than 1% area inside boundary
+  temp_locality_pcon24_wards <- temp_locality_pcon24_wards |> 
+    mutate(pct = area/full_area*100) |> 
+    filter(as.numeric(pct) > 1)
+  
+  # recalculate unclipped wards now wards with <1% are excluded
+  temp_locality_pcon24_wards_full <- bham_ward25_boundaries |> 
+    filter(wd25cd %in% temp_locality_pcon24_wards$wd25cd) |> 
+    mutate(locality = loc)
+  
+  # append temp dfs to main df
+  locality_pcon24_wards_full <- rbind(locality_pcon24_wards_full,
+                               temp_locality_pcon24_wards_full)
+  
+  locality_pcon24_wards <- rbind(locality_pcon24_wards,
+                          temp_locality_pcon24_wards)
+}
+
+locality_pcon24_wards |> 
   as_tibble() |> 
-  select(wd25nm, pcon24nm, pct) |> 
-  left_join(ward_district_locality_lookup |> select(district, locality) |> distinct(district, .keep_all = T),
-            by = join_by("pcon24nm" == "district")) |> 
-  mutate(locality = case_when(pcon24nm == "Hall Green and Moseley" ~ "Central",
-                              pcon24nm == "Hodge Hill and Solihull North" ~ "East",
-                              .default = locality))
+  select(wd25nm, locality, pct) |> 
   arrange(locality) |> 
   mutate(pct = round(pct, 0),
          pct = paste0(pct, "%")) |> 
   rename(`Ward name` = wd25nm,
          `Locality name` = locality,
          `% of ward in locality` = pct) |> 
+  datatable(rownames = F,
+            filter = "top",
+            options = list(pageLength = 15,
+                           autoWidth = TRUE))
+```
+
+## Model C
+```{r locality-model-c-table}
+ward_district_locality_lookup |> 
+  select(ward, locality) |> 
+  arrange(locality) |> 
+  mutate(pct = "100%") |> 
+  rename(`Ward name` = ward,
+         `Locality name` = locality,
+         `% of ward in locality` = pct) |> 
+  datatable(rownames = F,
+            filter = "top",
+            options = list(pageLength = 15,
+                           autoWidth = TRUE))
+```
+
+## Model D
+```{r locality-model-d-table}
+district_wards_best_fit |> 
+  left_join(ward_district_locality_lookup |> select(district, locality) |> distinct(district, .keep_all = T),
+            by = join_by("district_name" == "district")) |> 
+  select(wd25nm, locality) |> 
+  arrange(locality) |> 
+  mutate(pct = "100%") |> 
+  rename(`Ward name` = wd25nm,
+         `Locality name` = locality,
+         `% of ward in district` = pct) |> 
   datatable(rownames = F,
             filter = "top",
             options = list(pageLength = 15,
