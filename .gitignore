@@ -22,7 +22,7 @@
 # Exclude output formats
 *.doc
 *.docx
-*.html
+#*.html
 *.pdf
 *.ppt
 *.pptx
