@@ -1175,7 +1175,149 @@ pcon_wards |>
 ```
 :::
 
-# Potential District Models
+## Locality-PCN Interaction Maps
+
+These maps visualise the interaction between primary care networks (PCNs) and their assigned localities in Birmingham. Individual GP practices are shown and coloured according to their PCN. Some practices fall inside their PCN's assigned locality; others do not. Hovering over a point will show you the GP practice name, PCN and type (main/branch).
+
+Use the tabs to move between localities. The table in the final tab provides a summary of how many practices fall outside of their assigned locality, by locality and PCN - this can be filtered or sorted as needed.
+
+```{r locality-pcn-map-setup}
+make_locality_pcn_map <- function(loc){
+  locality_data <- bham_pcns |>
+    filter(locality_name == loc)
+  
+  label_pcn_GPs <- paste0(locality_data$prac_name, "<br>",
+                          locality_data$pcn, "<br>",
+                          locality_data$type)|> 
+    lapply(htmltools::HTML)
+  
+  pal <- colorFactor(
+    palette = "Dark2",   # or another palette name
+    domain = locality_data$pcn
+  )
+  
+  leaflet(locality_data,
+          width = "100%", height = "650px") |> 
+    addTiles(options = tileOptions(opacity = tile_opacity)) |>
+    addPolygons(data = bham_locality_boundaries |> filter(locality == loc),
+                color = border_colour,
+                weight = 4,
+                opacity = 1,
+                fillOpacity = 0.6,
+                fillColor = "white") |>
+    addCircleMarkers(color = ~pal(pcn),
+                     fillColor = ~pal(pcn),
+                     fillOpacity = 1,
+                     radius = 8,
+                     stroke = FALSE,
+                     label = label_pcn_GPs) |> 
+    addLegend(
+      "bottomright",
+      pal = pal,
+      values = ~pcn,
+      title = "PCN"
+    )
+}
+```
+
+::: panel-tabset
+## North
+
+```{r north-pcn-map}
+make_locality_pcn_map("North")
+```
+
+## East
+
+```{r East-pcn-map}
+make_locality_pcn_map("East")
+```
+
+## South
+
+```{r South-pcn-map}
+make_locality_pcn_map("South")
+```
+
+## West
+
+```{r West-pcn-map}
+make_locality_pcn_map("West")
+```
+
+## Central
+
+```{r Central-pcn-map}
+make_locality_pcn_map("Central")
+```
+
+## Table
+
+```{r locality-pcn-table}
+locality_pcn_table <- data.frame()
+
+for (loc in localities){
+  temp_locality_pcns <- bham_pcns |>
+    filter(locality_name == loc)
+  
+  temp_locality_pcn_matrix <- bham_locality_boundaries |>
+    filter(locality == loc) |> 
+    st_contains(temp_locality_pcns,
+                sparse = F)
+  
+  row.names(temp_locality_pcn_matrix) <- loc
+  
+  colnames(temp_locality_pcn_matrix) <- temp_locality_pcns$prac_name
+  
+  temp_locality_pcn_matrix <- temp_locality_pcn_matrix |> 
+    as_tibble(rownames = "locality_name") |> 
+    pivot_longer(cols = !locality_name,
+                 names_to = "prac_name",
+                 values_to = "in_locality")
+  
+  locality_pcn_table <- rbind(locality_pcn_table,
+                              temp_locality_pcn_matrix)
+}
+
+# locality_pcn_table |> 
+#   left_join(bham_pcns,
+#             by = c("locality_name", "prac_name")) |> 
+#   select(locality_name, pcn, prac_name, in_locality) |> 
+#   rename(`Locality` = locality_name,
+#          PCN = pcn,
+#          `Practice Name` = prac_name,
+#          `Falls inside assigned locality` = in_locality) |> 
+#   datatable(rownames = F,
+#             filter = "top",
+#             options = list(pageLength = 15,
+#                            autoWidth = TRUE))
+
+
+locality_pcn_table |> 
+  left_join(bham_pcns,
+            by = c("locality_name", "prac_name")) |> 
+  select(locality_name, pcn, prac_name, in_locality) |> 
+  group_by(locality_name, pcn, in_locality) |> 
+  count() |> 
+  #ungroup() |> 
+  group_by(locality_name, pcn) |> 
+  mutate(d = sum(n)) |> 
+  filter(in_locality == F) |> 
+  mutate(pct = n/d*100,
+         label = paste0(round(pct, 1), "% (", n, " out of ", d, " practices)")) |> 
+  select(locality_name, pcn, label) |> 
+  rename(`Locality` = locality_name,
+         PCN = pcn,
+         `Practices falling outside assigned locality` = label) |> 
+  datatable(rownames = F,
+            filter = "top",
+            options = list(pageLength = 15,
+                           autoWidth = TRUE))
+
+```
+:::
+
+# Potential District/Locality Models
 
 This section demonstrates the potential ways a district/locality model could be achieved.
 
