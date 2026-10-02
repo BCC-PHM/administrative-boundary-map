@@ -88,3 +88,9 @@ library(sf)
 st_write(proposed_bham_districts, "model_c.geojson")
 st_write(proposed_bham_districts_best_fit, "model_d.geojson")
 
+# write new ward-up locality models to geojson
+locality_wards_best_fit_sf |> 
+  group_by(locality) |> 
+  summarise(do_union = T) |> 
+  st_write("model_d_localities.geojson")
+
